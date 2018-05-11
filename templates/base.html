@@ -99,7 +99,7 @@
               <span>{% trans "menu" context "Hamburger button text" %}</span>
             </div>
             <a href="{% url 'home' %}">
-              <svg data-src="{% static "images/logo.svg" %}" height="38px" width="176px"/>
+              <img src="{% static 'images/mebelstock_logo.png' %}">
             </a>
           </div>
           <div class="col-2 col-md-4 navbar__search static">
@@ -182,7 +182,8 @@
       <div class="row">
         <div class="col-md-3">
           <a href="{% url 'home' %}" class="footer__logo">
-            <svg data-src="{% static "images/logo.svg" %}" height="38px" width="176px"/>
+              <img src="{% static 'images/mebelstock_logo.png' %}">
+            <!--<svg data-src="{% static "images/logo.svg" %}" height="38px" width="176px"/>-->
           </a>
         </div>
         <div class="col-md-3 col-sm-6">
@@ -248,28 +249,16 @@
           </ul>
         </div>
         <div class="col-md-3 col-sm-12">
-          <a target="_blank" rel="noopener" class="social-footer" href="https://www.facebook.com/mirumeelabs/">
+          <a target="_blank" rel="noopener" class="social-footer" href="https://www.facebook.com/mebelstockcom/">
             <svg data-src="{% static "images/facebook-logo.svg" %}" width="45px" height="45px"/>
           </a>
-          <a target="_blank" rel="noopener" class="social-footer" href="https://github.com/mirumee/saleor">
+          <a target="_blank" rel="noopener" class="social-footer" href="https://github.com/mebelstock/">
             <svg data-src="{% static "images/github-logo.svg" %}" width="45px" height="45px"/>
           </a>
-          <a target="_blank" rel="noopener" class="social-footer" href="https://twitter.com/getsaleor">
+          <a target="_blank" rel="noopener" class="social-footer" href="https://twitter.com/mebelstock">
             <svg data-src="{% static "images/twitter-logo.svg" %}" width="45px" height="45px"/>
           </a>
-          <a target="_blank" rel="noopener" class="social-footer" href="https://plus.google.com/+Mirumee">
-            <svg data-src="{% static "images/google-logo.svg" %}" width="45px" height="45px"/>
-          </a>
-          <a target="_blank" rel="noopener" class="social-footer" href="https://www.meetup.com/Mirumee-Talks/">
-            <svg data-src="{% static "images/meetup-logo.svg" %}" width="45px" height="45px"/>
-          </a>
-          <a target="_blank" rel="noopener" class="social-footer" href="https://linkedin.com/company/mirumee-software">
-            <svg data-src="{% static "images/linkedin-logo.svg" %}" width="45px" height="45px"/>
-          </a>
-          <a target="_blank" rel="noopener" class="social-footer" href="https://dribbble.com/mirumee">
-            <svg data-src="{% static "images/dribbble-logo.svg" %}" width="45px" height="45px"/>
-          </a>
-          <a target="_blank" rel="noopener" class="social-footer" href="https://www.instagram.com/explore/tags/mirumee/">
+          <a target="_blank" rel="noopener" class="social-footer" href="https://www.instagram.com/mebelstock_com/">
             <svg data-src="{% static "images/instagram-logo.svg" %}" width="45px" height="45px"/>
           </a>
         </div>
