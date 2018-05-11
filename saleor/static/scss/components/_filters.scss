@@ -90,8 +90,9 @@
       margin-bottom: 0;
       li {
         padding-left: 0;
+        padding-bottom: $global-padding/2;
         a {
-          font-size: 1.2rem;
+          font-size: .875rem;
           color: $body-color;
           padding-right: $global-padding/2;
         }
@@ -177,6 +178,7 @@
         }
       }
       span {
+        font-size: .7rem;
         &:hover {
           text-decoration: underline;
         }
