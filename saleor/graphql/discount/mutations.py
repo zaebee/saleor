@@ -30,8 +30,10 @@ class VoucherInput(graphene.InputObjectType):
     discount_value_type = DiscountValueTypeEnum(
         description='Choices: fixed or percentage.')
     discount_value = Decimal(description='Value of the voucher.')
-    product = graphene.ID(description='Product related to the discount.')
-    category = graphene.ID(description='Category related to the discount.')
+    product = graphene.ID(
+        description='Product related to the discount.', name='product')
+    category = graphene.ID(
+        description='Category related to the discount.', name='category')
     apply_to = ApplyToEnum(description='Single item or all matching products.')
     limit = Decimal(description='Limit value of the discount.')
 
@@ -91,9 +93,11 @@ class SaleInput(graphene.InputObjectType):
     type = DiscountValueTypeEnum(description='Fixed or percentage.')
     value = Decimal(description='Value of the voucher.')
     products = graphene.List(
-        graphene.ID, description='Products related to the discount.')
+        graphene.ID, description='Products related to the discount.',
+        name='products')
     categories = graphene.List(
-        graphene.ID, description='Categories related to the discount.')
+        graphene.ID, description='Categories related to the discount.',
+        name='categories')
 
 
 class SaleCreate(ModelMutation):

@@ -35,7 +35,7 @@ class CategoryInput(graphene.InputObjectType):
     parent = graphene.ID(
         description='''
         ID of the parent category. If empty, category will be top level
-        category.''')
+        category.''', name='parent')
     slug = graphene.String(description='Category slug')
     seo = SeoInput(description='Search engine optimization fields.')
 
@@ -96,7 +96,8 @@ class CollectionInput(graphene.InputObjectType):
     slug = graphene.String(description='Slug of the collection.')
     products = graphene.List(
         graphene.ID,
-        description='List of products to be added to the collection.')
+        description='List of products to be added to the collection.',
+        name='products')
     background_image = Upload(description='Background image file.')
     seo = SeoInput(description='Search engine optimization fields.')
 
@@ -208,13 +209,15 @@ class ProductInput(graphene.InputObjectType):
         description='List of product attributes.')
     available_on = graphene.types.datetime.Date(
         description='Publication date. ISO 8601 standard.')
-    category = graphene.ID(description='ID of the product\'s category.')
+    category = graphene.ID(
+        description='ID of the product\'s category.', name='category')
     charge_taxes = graphene.Boolean(
         required=True,
         description='Determine if taxes are being charged for the product.')
     collections = graphene.List(
         graphene.ID,
-        description='List of IDs of collections that the product belongs to.')
+        description='List of IDs of collections that the product belongs to.',
+        name='collections')
     description = graphene.String(description='Product description.')
     is_published = graphene.Boolean(
         required=True,
@@ -224,7 +227,8 @@ class ProductInput(graphene.InputObjectType):
         description='Determines if product is featured in the storefront.')
     name = graphene.String(description='Product name.')
     product_type = graphene.ID(
-        description='ID of the type that product belongs to.')
+        description='ID of the type that product belongs to.',
+        name='productType')
     price = Decimal(description='Product price.')
     tax_rate = graphene.String(description='Tax rate.')
     seo = SeoInput(description='Search engine optimization fields.')
@@ -306,7 +310,8 @@ class ProductVariantInput(graphene.InputObjectType):
     price_override = Decimal(
         description='Special price of the particular variant.')
     product = graphene.ID(
-        description='Product ID of which type is the variant.')
+        description='Product ID of which type is the variant.',
+        name='product')
     sku = graphene.String(description='Stock keeping unit.')
     quantity = graphene.Int(
         description='The total quantity of this variant available for sale.')
@@ -396,11 +401,13 @@ class ProductTypeInput(graphene.InputObjectType):
         the hood.""")
     product_attributes = graphene.List(
         graphene.ID,
-        description='List of attributes shared among all product variants.')
+        description='List of attributes shared among all product variants.',
+        name='productAttributes')
     variant_attributes = graphene.List(
         graphene.ID,
         description="""List of attributes used to distinguish between
-        different variants of a product.""")
+        different variants of a product.""",
+        name='variantAttributes')
     is_shipping_required = graphene.Boolean(
         required=True,
         description="""Determines if shipping is required for products
@@ -460,7 +467,7 @@ class ProductTypeDelete(ModelDeleteMutation):
 class ProductImageInput(graphene.InputObjectType):
     alt = graphene.String(description='Alt text for an image.')
     image = Upload(required=True, description='Image file.')
-    product = graphene.ID(description='ID of an product.')
+    product = graphene.ID(description='ID of an product.', name='product')
 
 
 class ProductImageCreate(ModelMutation):
