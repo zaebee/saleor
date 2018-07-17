@@ -81,3 +81,25 @@ def test_mutation_returns_error_field_in_camel_case(admin_api_client, variant):
     content = get_graphql_content(response)
     error = content['data']['productVariantUpdate']['errors'][0]
     assert error['field'] == 'costPrice'
+
+
+def test_user_error_field_name_for_related_object(admin_api_client):
+    query = """
+    mutation {
+        categoryCreate(input: {name: "Test", parent: "123456"}) {
+            errors {
+                field
+                message
+            }
+            category {
+                id
+            }
+        }
+    }
+    """
+    response = admin_api_client.post(reverse('api'), {'query': query})
+    content = get_graphql_content(response)
+    data = content['data']['categoryCreate']['category']
+    assert data is None
+    error = content['data']['categoryCreate']['errors'][0]
+    assert error['field'] == 'parent'
