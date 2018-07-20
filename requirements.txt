@@ -29,6 +29,7 @@ django-bootstrap4==0.0.5
 django-cache-url==2.0.0
 django-celery-results==1.0.1
 django-countries==5.2
+django-debug-toolbar-request-history==0.0.7
 django-debug-toolbar==1.9.1
 django-elasticsearch-dsl==0.4.4
 django-environ==0.4.4     # via django-graphql-jwt
@@ -59,7 +60,6 @@ freezegun==0.3.10
 google-i18n-address==2.3.0
 google-measurement-protocol==1.0.0
 graphene-django==2.0.0
-graphene-file-upload==0.1.1
 graphene==2.0.1           # via django-graphql-jwt, graphene-django
 graphql-core==2.0         # via graphene, graphql-relay
 graphql-relay==0.4.5      # via graphene

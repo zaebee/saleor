@@ -84,8 +84,8 @@ def checkout_shipping_method(request, cart):
 def checkout_summary(request, cart):
     """Display the correct order summary."""
     if cart.is_shipping_required():
-        view = validate_shipping_address(summary_with_shipping_view)
-        view = validate_shipping_method(view)
+        view = validate_shipping_method(summary_with_shipping_view)
+        view = validate_shipping_address(view)
         return view(request, cart)
     if request.user.is_authenticated:
         return summary_without_shipping(request, cart)
@@ -111,6 +111,7 @@ def cart_index(request, cart):
         'variant__product__product_type',
         'variant__product__category')
     lines = lines.prefetch_related(
+        'variant__product__collections',
         'variant__product__images',
         'variant__product__product_type__variant_attributes')
     for line in lines:

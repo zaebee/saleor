@@ -3,7 +3,7 @@ from io import BytesIO
 from unittest.mock import MagicMock, Mock
 
 import pytest
-from django.contrib.auth.models import Group, Permission
+from django.contrib.auth.models import Permission
 from django.contrib.sites.models import Site
 from django.core.files import File
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -259,11 +259,6 @@ def non_default_category(db):  # pylint: disable=W0613
 
 
 @pytest.fixture
-def staff_group():
-    return Group.objects.create(name='test')
-
-
-@pytest.fixture
 def permission_view_product():
     return Permission.objects.get(codename='view_product')
 
@@ -343,12 +338,14 @@ def product(product_type, default_category):
         cost_price=Money('1.00', 'USD'), quantity=10, quantity_allocated=1)
     return product
 
+
 @pytest.fixture
 def variant(product):
     product_variant = ProductVariant.objects.create(
         product=product, sku='SKU_A', cost_price=Money(1, 'USD'), quantity=5,
         quantity_allocated=3)
     return product_variant
+
 
 @pytest.fixture
 def product_without_shipping(default_category):
@@ -575,9 +572,10 @@ def payment_input(order_with_lines):
 
 
 @pytest.fixture()
-def sale(db, default_category):
+def sale(db, default_category, collection):
     sale = Sale.objects.create(name="Sale", value=5)
     sale.categories.add(default_category)
+    sale.collections.add(collection)
     return sale
 
 
@@ -596,16 +594,6 @@ def permission_view_staff():
 @pytest.fixture
 def permission_edit_staff():
     return Permission.objects.get(codename='edit_staff')
-
-
-@pytest.fixture
-def permission_view_group():
-    return Permission.objects.get(codename='view_group')
-
-
-@pytest.fixture
-def permission_edit_group():
-    return Permission.objects.get(codename='edit_group')
 
 
 @pytest.fixture

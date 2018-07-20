@@ -1,13 +1,13 @@
 import graphene
 from django.template.defaultfilters import slugify
 from graphene.types import InputObjectType
-from graphene_file_upload import Upload
 from graphql_jwt.decorators import permission_required
 
 from ....product import models
 from ...core.mutations import BaseMutation, ModelDeleteMutation, ModelMutation
 from ...core.types import Decimal, Error, SeoInput
 from ...core.utils import clean_seo_fields
+from ...file_upload.types import Upload
 from ...utils import get_attributes_dict_from_list, get_node, get_nodes
 from ..types import Collection, Product, ProductImage
 
@@ -445,11 +445,19 @@ class ProductImageCreate(ModelMutation):
         model = models.ProductImage
 
     @classmethod
+    def clean_input(cls, info, instance, input, errors):
+        cleaned_input = super().clean_input(info, instance, input, errors)
+        uploaded_image = cleaned_input['image']
+        if not uploaded_image.content_type.startswith('image/'):
+            cls.add_error(errors, 'image', 'Invalid file type')
+        return cleaned_input
+
+    @classmethod
     def user_is_allowed(cls, user, input):
         return user.has_perm('product.edit_product')
 
 
-class ProductImageUpdate(ModelMutation):
+class ProductImageUpdate(ProductImageCreate):
     class Arguments:
         id = graphene.ID(
             required=True, description='ID of a product image to update.')
@@ -460,10 +468,6 @@ class ProductImageUpdate(ModelMutation):
     class Meta:
         description = 'Updates a product image.'
         model = models.ProductImage
-
-    @classmethod
-    def user_is_allowed(cls, user, input):
-        return user.has_perm('product.edit_product')
 
 
 class ProductImageReorder(BaseMutation):
