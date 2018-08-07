@@ -1,0 +1,27 @@
+User-agent: Yandex
+Disallow: /admin/
+Disallow: /password/
+Disallow: /login/
+Disallow: /logout/
+Disallow: /validate/
+Disallow: /accounts/
+Disallow: /set_lang/
+Sitemap: https://kamenicona.ru/sitemap.xml
+
+User-agent: GoogleBot
+Disallow: /admin/
+Disallow: /password/
+Disallow: /login/
+Disallow: /logout/
+Disallow: /validate/
+Disallow: /accounts/
+Disallow: /set_lang/
+
+User-agent: *
+Disallow: /admin/
+Disallow: /password/
+Disallow: /login/
+Disallow: /logout/
+Disallow: /validate/
+Disallow: /accounts/
+Disallow: /set_lang/
