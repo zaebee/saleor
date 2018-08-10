@@ -61,6 +61,7 @@ LANGUAGES = [
     ('de', _('German')),
     ('en', _('English')),
     ('ru', _('Russian')),
+]
 LOCALE_PATHS = [os.path.join(PROJECT_ROOT, 'locale')]
 USE_I18N = True
 USE_L10N = True
