@@ -39,7 +39,7 @@ Usage
     $ docker-compose run web python3 manage.py collectstatic
     $ docker-compose run web python3 manage.py populatedb --createsuperuser
 
-   The ``--createsuperuser`` switch creates an admin account for
+   The ``--createsuperuser`` argument creates an admin account for
    ``admin@example.com`` with the password set to ``admin``.
 
 
@@ -50,6 +50,4 @@ Usage
     $ docker-compose up
 
 
-By default, the application is started in debug mode, will automatically reload code and is configured to listen on port ``8000``.
-
-
+By default, the application is started in debug mode and is configured to listen on port ``8000``.

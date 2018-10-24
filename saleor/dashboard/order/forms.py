@@ -15,15 +15,14 @@ from ...core.utils.taxes import ZERO_TAXED_MONEY
 from ...discount.models import Voucher
 from ...discount.utils import decrease_voucher_usage, increase_voucher_usage
 from ...order import CustomPaymentChoices, OrderStatus
-from ...order.emails import send_note_confirmation
 from ...order.models import (
-    Fulfillment, FulfillmentLine, Order, OrderLine, OrderNote, Payment)
+    Fulfillment, FulfillmentLine, Order, OrderLine, Payment)
 from ...order.utils import (
     add_variant_to_order, cancel_fulfillment, cancel_order,
     change_order_line_quantity, recalculate_order)
 from ...product.models import Product, ProductVariant
 from ...product.utils import allocate_stock, deallocate_stock
-from ...shipping.models import ANY_COUNTRY, ShippingMethodCountry
+from ...shipping.models import ShippingMethod
 from ..forms import AjaxSelect2ChoiceField
 from ..widgets import PhonePrefixWidget
 from .utils import (
@@ -60,8 +59,7 @@ class CreateOrderFromDraftForm(forms.ModelForm):
             shipping_address = self.instance.shipping_address
             shipping_not_valid = (
                 method and shipping_address and
-                method.country_code != ANY_COUNTRY and
-                shipping_address.country.code != method.country_code)
+                shipping_address.country.code not in method.shipping_zone.countries)  # noqa
             if shipping_not_valid:
                 errors.append(forms.ValidationError(pgettext_lazy(
                     'Create draft order form error',
@@ -149,9 +147,8 @@ class OrderRemoveCustomerForm(forms.ModelForm):
 
 class OrderShippingForm(forms.ModelForm):
     """Set shipping name and shipping price in an order."""
-
     shipping_method = AjaxSelect2ChoiceField(
-        queryset=ShippingMethodCountry.objects.all(), min_input=0,
+        queryset=ShippingMethod.objects.all(), min_input=0,
         label=pgettext_lazy(
             'Shipping method form field label', 'Shipping method'))
 
@@ -174,14 +171,14 @@ class OrderShippingForm(forms.ModelForm):
 
         if self.instance.shipping_address:
             country_code = self.instance.shipping_address.country.code
-            queryset = method_field.queryset.unique_for_country_code(
-                country_code)
+            queryset = method_field.queryset.filter(
+                shipping_zone__countries__contains=country_code)
             method_field.queryset = queryset
 
     def save(self, commit=True):
         method = self.instance.shipping_method
-        self.instance.shipping_method_name = method.shipping_method.name
-        self.instance.shipping_price = method.get_total_price(self.taxes)
+        self.instance.shipping_method_name = method.name
+        self.instance.shipping_price = method.get_total(self.taxes)
         recalculate_order(self.instance)
         return super().save(commit)
 
@@ -241,25 +238,16 @@ class OrderEditVoucherForm(forms.ModelForm):
                 decrease_voucher_usage(self.old_voucher)
             increase_voucher_usage(voucher)
         self.instance.discount_name = voucher.name or ''
+        self.instance.translated_discount_name = (
+            voucher.translated.name
+            if voucher.translated.name != voucher.name else '')
         recalculate_order(self.instance)
         return super().save(commit)
 
 
-class OrderNoteForm(forms.ModelForm):
-    class Meta:
-        model = OrderNote
-        fields = ['content', 'is_public']
-        widgets = {
-            'content': forms.Textarea()}
-        labels = {
-            'content': pgettext_lazy('Order note', 'Note'),
-            'is_public': pgettext_lazy(
-                'Allow customers to see note toggle',
-                'Customer can see this note')}
-
-    def send_confirmation_email(self):
-        if self.instance.order.get_user_current_email():
-            send_note_confirmation.delay(self.instance.order.pk)
+class OrderNoteForm(forms.Form):
+    message = forms.CharField(
+        label=pgettext_lazy('Order note', 'Note'), widget=forms.Textarea())
 
 
 class ManagePaymentForm(forms.Form):
@@ -535,6 +523,7 @@ class OrderRemoveVoucherForm(forms.ModelForm):
         decrease_voucher_usage(self.instance.voucher)
         self.instance.discount_amount = 0
         self.instance.discount_name = ''
+        self.instance.translated_discount_name = ''
         self.instance.voucher = None
         recalculate_order(self.instance)
 

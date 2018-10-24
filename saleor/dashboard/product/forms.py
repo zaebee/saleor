@@ -1,7 +1,7 @@
 import bleach
 from django import forms
 from django.conf import settings
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.forms.models import ModelChoiceIterator
 from django.forms.widgets import CheckboxSelectMultiple
 from django.utils.encoding import smart_text
@@ -11,11 +11,12 @@ from django_prices_vatlayer.utils import get_tax_rate_types
 from mptt.forms import TreeNodeChoiceField
 
 from . import ProductBulkAction
-from ...core.i18n import VAT_RATE_TYPE_TRANSLATIONS
+from ...core import TaxRateType
 from ...core.utils.taxes import DEFAULT_TAX_RATE_NAME, include_taxes_in_prices
+from ...core.weight import WeightField
 from ...product.models import (
-    AttributeChoiceValue, Category, Collection, Product, ProductAttribute,
-    ProductImage, ProductType, ProductVariant, VariantImage)
+    Attribute, AttributeValue, Category, Collection, Product, ProductImage,
+    ProductType, ProductVariant, VariantImage)
 from ...product.thumbnails import create_product_thumbnails
 from ...product.utils.attributes import get_name_from_attributes
 from ..forms import ModelChoiceOrCreationField, OrderedModelMultipleChoiceField
@@ -57,8 +58,9 @@ class ProductTypeSelectorForm(forms.Form):
 
 def get_tax_rate_type_choices():
     rate_types = get_tax_rate_types() + [DEFAULT_TAX_RATE_NAME, '']
+    translations = dict(TaxRateType.CHOICES)
     choices = [
-        (rate_name, VAT_RATE_TYPE_TRANSLATIONS.get(rate_name, '---------'))
+        (rate_name, translations.get(rate_name, '---------'))
         for rate_name in rate_types]
     # sort choices alphabetically by translations
     return sorted(choices, key=lambda x: x[1])
@@ -68,6 +70,21 @@ class ProductTypeForm(forms.ModelForm):
     tax_rate = forms.ChoiceField(
         required=False,
         label=pgettext_lazy('Product type tax rate type', 'Tax rate'))
+    weight = WeightField(
+        label=pgettext_lazy('ProductType weight', 'Weight'),
+        help_text=pgettext_lazy(
+            'ProductVariant weight help text',
+            'Default weight that will be used for calculating shipping'
+            ' price for products of that type.'))
+    product_attributes = forms.ModelMultipleChoiceField(
+        queryset=Attribute.objects.none(), required=False,
+        label=pgettext_lazy(
+            'Product type attributes', 'Attributes common to all variants.'))
+    variant_attributes = forms.ModelMultipleChoiceField(
+        queryset=Attribute.objects.none(), required=False,
+        label=pgettext_lazy(
+            'Product type attributes',
+            'Attributes specific to each variant.'))
 
     class Meta:
         model = ProductType
@@ -79,12 +96,6 @@ class ProductTypeForm(forms.ModelForm):
             'has_variants': pgettext_lazy(
                 'Enable variants',
                 'Enable variants'),
-            'variant_attributes': pgettext_lazy(
-                'Product type attributes',
-                'Attributes specific to each variant'),
-            'product_attributes': pgettext_lazy(
-                'Product type attributes',
-                'Attributes common to all variants'),
             'is_shipping_required': pgettext_lazy(
                 'Shipping toggle',
                 'Require shipping')}
@@ -92,12 +103,33 @@ class ProductTypeForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['tax_rate'].choices = get_tax_rate_type_choices()
+        unassigned_attrs_q = Q(
+            product_type__isnull=True, product_variant_type__isnull=True)
+
+        if self.instance.pk:
+            product_attrs_qs = Attribute.objects.filter(
+                Q(product_type=self.instance) | unassigned_attrs_q)
+            variant_attrs_qs = Attribute.objects.filter(
+                Q(product_variant_type=self.instance) | unassigned_attrs_q)
+            product_attrs_initial = self.instance.product_attributes.all()
+            variant_attrs_initial = self.instance.variant_attributes.all()
+        else:
+            unassigned_attrs = Attribute.objects.filter(unassigned_attrs_q)
+            product_attrs_qs = unassigned_attrs
+            variant_attrs_qs = unassigned_attrs
+            product_attrs_initial = []
+            variant_attrs_initial = []
+
+        self.fields['product_attributes'].queryset = product_attrs_qs
+        self.fields['variant_attributes'].queryset = variant_attrs_qs
+        self.fields['product_attributes'].initial = product_attrs_initial
+        self.fields['variant_attributes'].initial = variant_attrs_initial
 
     def clean(self):
         data = super().clean()
         has_variants = self.cleaned_data['has_variants']
-        product_attr = set(self.cleaned_data['product_attributes'])
-        variant_attr = set(self.cleaned_data['variant_attributes'])
+        product_attr = set(self.cleaned_data.get('product_attributes', []))
+        variant_attr = set(self.cleaned_data.get('variant_attributes', []))
         if not has_variants and variant_attr:
             msg = pgettext_lazy(
                 'Product type form error',
@@ -129,9 +161,11 @@ class ProductTypeForm(forms.ModelForm):
             product__product_type__variant_attributes__in=attributes_changed)
         variants_to_be_updated = variants_to_be_updated.prefetch_related(
             'product__product_type__variant_attributes__values').all()
+        attributes = self.instance.variant_attributes.prefetch_related(
+            'translations', 'values__translations')
         for variant in variants_to_be_updated:
-            variant.name = get_name_from_attributes(variant)
-            variant.save()
+            variant.name = get_name_from_attributes(variant, attributes)
+            variant.save(update_fields=['name'])
 
     def check_if_variants_changed(self, has_variants):
         variants_changed = (
@@ -147,11 +181,19 @@ class ProductTypeForm(forms.ModelForm):
                     'one variant.')
                 self.add_error('has_variants', msg)
 
+    def save(self, *args, **kwargs):
+        instance = super().save(*args, **kwargs)
+        new_product_attrs = self.cleaned_data.get('product_attributes', [])
+        new_variant_attrs = self.cleaned_data.get('variant_attributes', [])
+        instance.product_attributes.set(new_product_attrs)
+        instance.variant_attributes.set(new_variant_attrs)
+        return instance
 
-class AttributesMixin(object):
+
+class AttributesMixin:
     """Form mixin that dynamically adds attribute fields."""
 
-    available_attributes = ProductAttribute.objects.none()
+    available_attributes = Attribute.objects.none()
 
     # Name of a field in self.instance that hold attributes HStore
     model_attributes_field = None
@@ -186,8 +228,8 @@ class AttributesMixin(object):
             if value:
                 # if the passed attribute value is a string,
                 # create the attribute value.
-                if not isinstance(value, AttributeChoiceValue):
-                    value = AttributeChoiceValue(
+                if not isinstance(value, AttributeValue):
+                    value = AttributeValue(
                         attribute_id=attr.pk, name=value, slug=slugify(value))
                     value.save()
                 attributes[smart_text(attr.pk)] = smart_text(value.pk)
@@ -207,6 +249,12 @@ class ProductForm(forms.ModelForm, AttributesMixin):
         label=pgettext_lazy('Add to collection select', 'Collections'))
     description = RichTextField(
         label=pgettext_lazy('Description', 'Description'))
+    weight = WeightField(
+        required=False, label=pgettext_lazy('ProductType weight', 'Weight'),
+        help_text=pgettext_lazy(
+            'Product weight field help text',
+            'Weight will be used to calculate shipping price, '
+            'if empty, equal to default value used on the ProductType.'))
 
     model_attributes_field = 'attributes'
 
@@ -220,9 +268,6 @@ class ProductForm(forms.ModelForm, AttributesMixin):
                 'Availability date', 'Publish product on'),
             'is_published': pgettext_lazy(
                 'Product published toggle', 'Published'),
-            'is_featured': pgettext_lazy(
-                'Featured product toggle',
-                'Feature this product on homepage'),
             'charge_taxes': pgettext_lazy(
                 'Charge taxes on product', 'Charge taxes on this product')}
 
@@ -249,6 +294,12 @@ class ProductForm(forms.ModelForm, AttributesMixin):
             self.fields['price'].label = pgettext_lazy(
                 'Currency net amount', 'Net price')
 
+        if not product_type.is_shipping_required:
+            del self.fields['weight']
+        else:
+            self.fields['weight'].widget.attrs['placeholder'] = (
+                product_type.weight.value)
+
     def clean_seo_description(self):
         seo_description = prepare_seo_description(
             seo_description=self.cleaned_data['seo_description'],
@@ -268,11 +319,17 @@ class ProductForm(forms.ModelForm, AttributesMixin):
 
 class ProductVariantForm(forms.ModelForm, AttributesMixin):
     model_attributes_field = 'attributes'
+    weight = WeightField(
+        required=False, label=pgettext_lazy('ProductVariant weight', 'Weight'),
+        help_text=pgettext_lazy(
+            'ProductVariant weight help text',
+            'Weight will be used to calculate shipping price. '
+            'If empty, weight from Product or ProductType will be used.'))
 
     class Meta:
         model = ProductVariant
         fields = [
-            'sku', 'price_override',
+            'sku', 'price_override', 'weight',
             'quantity', 'cost_price', 'track_inventory']
         labels = {
             'sku': pgettext_lazy('SKU', 'SKU'),
@@ -309,10 +366,18 @@ class ProductVariantForm(forms.ModelForm, AttributesMixin):
             self.fields['cost_price'].label = pgettext_lazy(
                 'Currency amount', 'Cost net price')
 
+        if not self.instance.product.product_type.is_shipping_required:
+            del self.fields['weight']
+        else:
+            self.fields['weight'].widget.attrs['placeholder'] = (
+                getattr(self.instance.product.weight, 'value', None) or
+                self.instance.product.product_type.weight.value)
+
     def save(self, commit=True):
         attributes = self.get_saved_attributes()
         self.instance.attributes = attributes
-        self.instance.name = get_name_from_attributes(self.instance)
+        attrs = self.instance.product.product_type.variant_attributes.all()
+        self.instance.name = get_name_from_attributes(self.instance, attrs)
         return super().save(commit=commit)
 
 
@@ -387,9 +452,9 @@ class VariantImagesSelectForm(forms.Form):
         VariantImage.objects.bulk_create(images)
 
 
-class ProductAttributeForm(forms.ModelForm):
+class AttributeForm(forms.ModelForm):
     class Meta:
-        model = ProductAttribute
+        model = Attribute
         exclude = []
         labels = {
             'name': pgettext_lazy(
@@ -398,9 +463,9 @@ class ProductAttributeForm(forms.ModelForm):
                 'Product internal name', 'Internal name')}
 
 
-class AttributeChoiceValueForm(forms.ModelForm):
+class AttributeValueForm(forms.ModelForm):
     class Meta:
-        model = AttributeChoiceValue
+        model = AttributeValue
         fields = ['attribute', 'name']
         widgets = {'attribute': forms.widgets.HiddenInput()}
         labels = {
@@ -412,12 +477,12 @@ class AttributeChoiceValueForm(forms.ModelForm):
         return super().save(commit=commit)
 
 
-class ReorderAttributeChoiceValuesForm(forms.ModelForm):
+class ReorderAttributeValuesForm(forms.ModelForm):
     ordered_values = OrderedModelMultipleChoiceField(
-        queryset=AttributeChoiceValue.objects.none())
+        queryset=AttributeValue.objects.none())
 
     class Meta:
-        model = ProductAttribute
+        model = Attribute
         fields = ()
 
     def __init__(self, *args, **kwargs):

@@ -1,5 +1,4 @@
 import json
-from unittest.mock import Mock
 
 import pytest
 from django.conf import settings
@@ -10,20 +9,22 @@ from tests.utils import get_form_errors, get_redirect_location
 
 from saleor.checkout import AddressType
 from saleor.core.utils.taxes import ZERO_MONEY, ZERO_TAXED_MONEY
-from saleor.dashboard.order.forms import ChangeQuantityForm, OrderNoteForm
+from saleor.dashboard.order.forms import ChangeQuantityForm
 from saleor.dashboard.order.utils import (
     fulfill_order_line, remove_customer_from_order, save_address_in_order,
     update_order_with_user_addresses)
 from saleor.discount.utils import increase_voucher_usage
-from saleor.order import FulfillmentStatus, OrderStatus
-from saleor.order.models import Order, OrderLine, OrderNote
+from saleor.order import (
+    FulfillmentStatus, OrderEvents, OrderEventsEmails, OrderStatus)
+from saleor.order.models import Order, OrderEvent, OrderLine
 from saleor.order.utils import add_variant_to_order, change_order_line_quantity
 from saleor.product.models import ProductVariant
+from saleor.shipping.models import ShippingZone
 
 
 def test_ajax_order_shipping_methods_list(
-        admin_client, order, shipping_method):
-    method = shipping_method.price_per_country.get()
+        admin_client, order, shipping_zone):
+    method = shipping_zone.shipping_methods.get()
     shipping_methods_list = [
         {'id': method.pk, 'text': method.get_ajax_label()}]
     url = reverse(
@@ -37,13 +38,19 @@ def test_ajax_order_shipping_methods_list(
 
 
 def test_ajax_order_shipping_methods_list_different_country(
-        admin_client, order, shipping_method):
+        admin_client, order, shipping_zone):
     order.shipping_address = order.billing_address.get_copy()
     order.save()
-    method = shipping_method.price_per_country.get()
+    method = shipping_zone.shipping_methods.get()
     shipping_methods_list = [
         {'id': method.pk, 'text': method.get_ajax_label()}]
-    shipping_method.price_per_country.create(price=15, country_code='DE')
+    # If shipping zone does not cover order's country,
+    # then its shipping methods should not be included
+    assert order.shipping_address.country.code != 'DE'
+    zone = ShippingZone.objects.create(name='Shipping zone', countries=['DE'])
+    zone.shipping_methods.create(
+        price=Money(15, settings.DEFAULT_CURRENCY), name='DHL')
+
     url = reverse(
         'dashboard:ajax-order-shipping-methods', kwargs={'order_pk': order.pk})
 
@@ -186,7 +193,8 @@ def test_view_refund_order_payment_confirmed(
             'amount': str(payment_confirmed.captured_amount)})
     assert response.status_code == 302
     assert order.payments.last().status == PaymentStatus.REFUNDED
-    assert order.payments.last().get_captured_price() == Money(0, 'USD')
+    assert order.payments.last().get_captured_price() == Money(
+        0, settings.DEFAULT_CURRENCY)
 
 
 @pytest.mark.integration
@@ -560,7 +568,7 @@ def test_dashboard_change_quantity_form(request_cart_with_item, order):
 
 
 def test_ordered_item_change_quantity(transactional_db, order_with_lines):
-    assert not order_with_lines.history.count()
+    assert not order_with_lines.events.count()
     lines = order_with_lines.lines.all()
     change_order_line_quantity(lines[1], 0)
     change_order_line_quantity(lines[0], 0)
@@ -637,16 +645,6 @@ def test_view_add_variant_to_order(admin_client, order_with_lines):
     assert get_redirect_location(response) == reverse(
         'dashboard:order-details', kwargs={'order_pk': order_with_lines.pk})
     assert line.quantity == line_quantity_before + added_quantity
-
-
-def test_note_form_sent_email(monkeypatch, order_with_lines):
-    mock_send_mail = Mock(return_value=None)
-    monkeypatch.setattr(
-        'saleor.dashboard.order.forms.send_note_confirmation', mock_send_mail)
-    note = OrderNote(order=order_with_lines, user=order_with_lines.user)
-    form = OrderNoteForm({'content': 'test_note'}, instance=note)
-    form.send_confirmation_email()
-    assert mock_send_mail.called_once()
 
 
 def test_fulfill_order_line(order_with_lines):
@@ -781,16 +779,21 @@ def test_view_create_from_draft_order_not_draft_order(
     assert response.status_code == 404
 
 
-def test_view_create_from_draft_order_shipping_method_not_valid(
-        admin_client, draft_order, shipping_method):
-    method = shipping_method.price_per_country.create(
-        country_code='DE', price=10)
+def test_view_create_from_draft_order_shipping_zone_not_valid(
+        admin_client, draft_order, shipping_zone):
+    method = shipping_zone.shipping_methods.create(
+        name='DHL', price=Money(10, settings.DEFAULT_CURRENCY))
+    shipping_zone.countries = ['DE']
+    shipping_zone.save()
+    # Shipping zone is not valid, as shipping address is listed outside the
+    # shipping zone's countries
+    assert draft_order.shipping_address.country.code != 'DE'
     draft_order.shipping_method = method
     draft_order.save()
     url = reverse(
         'dashboard:create-order-from-draft',
         kwargs={'order_pk': draft_order.pk})
-    data = {'csrfmiddlewaretoken': 'hello'}
+    data = {'shipping_method': method.pk}
 
     response = admin_client.post(url, data)
 
@@ -919,9 +922,9 @@ def test_view_order_customer_remove(admin_client, draft_order):
 
 
 def test_view_order_shipping_edit(
-        admin_client, draft_order, shipping_method, settings, vatlayer):
-    method = shipping_method.price_per_country.create(
-        price=Money(5, settings.DEFAULT_CURRENCY), country_code='PL')
+        admin_client, draft_order, shipping_zone, settings, vatlayer):
+    method = shipping_zone.shipping_methods.create(
+        price=Money(5, settings.DEFAULT_CURRENCY), name='DHL')
     url = reverse(
         'dashboard:order-shipping-edit', kwargs={'order_pk': draft_order.pk})
     data = {'shipping_method': method.pk}
@@ -933,15 +936,15 @@ def test_view_order_shipping_edit(
         'dashboard:order-details', kwargs={'order_pk': draft_order.pk})
     assert get_redirect_location(response) == redirect_url
     draft_order.refresh_from_db()
-    assert draft_order.shipping_method_name == shipping_method.name
-    assert draft_order.shipping_price == method.get_total_price(taxes=vatlayer)
+    assert draft_order.shipping_method_name == method.name
+    assert draft_order.shipping_price == method.get_total(taxes=vatlayer)
     assert draft_order.shipping_method == method
 
 
 def test_view_order_shipping_edit_not_draft_order(
-        admin_client, order_with_lines, shipping_method):
-    method = shipping_method.price_per_country.create(
-        price=5, country_code='PL')
+        admin_client, order_with_lines, shipping_zone):
+    method = shipping_zone.shipping_methods.create(
+        price=Money(5, settings.DEFAULT_CURRENCY), name='DHL')
     url = reverse(
         'dashboard:order-shipping-edit',
         kwargs={'order_pk': order_with_lines.pk})
@@ -1147,8 +1150,8 @@ def test_view_mark_order_as_paid(admin_client, order_with_lines):
 
     order_with_lines.refresh_from_db()
     assert order_with_lines.is_fully_paid()
-    assert order_with_lines.history.filter(
-        content='Order manually marked as paid').exists()
+    assert order_with_lines.events.filter(
+        type=OrderEvents.ORDER_MARKED_AS_PAID.value).exists()
 
 
 def test_view_fulfill_order_lines(admin_client, order_with_lines):
@@ -1206,3 +1209,33 @@ def test_render_cancel_fulfillment_page(admin_client, fulfilled_order):
         kwargs={'order_pk': fulfilled_order.pk})
     response = admin_client.get(url)
     assert response.status_code == 200
+
+
+def test_view_add_order_note(admin_client, order_with_lines):
+    url = reverse(
+        'dashboard:order-add-note',
+        kwargs={'order_pk': order_with_lines.pk})
+    note_content = 'this is a note'
+    data = {
+        'csrfmiddlewaretoken': 'hello',
+        'message': note_content}
+    response = admin_client.post(url, data)
+    assert response.status_code == 200
+    order_with_lines.refresh_from_db()
+    assert order_with_lines.events.first().parameters['message'] == note_content  # noqa
+
+
+@pytest.mark.parametrize('type', [e.value for e in OrderEvents])
+def test_order_event_display(admin_user, type, order):
+    parameters = {
+        'message': 'Example Note',
+        'quantity': 12,
+        'email_type': OrderEventsEmails.PAYMENT.value,
+        'email': 'example@example.com',
+        'amount': {'_type': 'Money', 'amount': '10.00', 'currency': 'USD'},
+        'composed_id': 12,
+        'tracking_number': '5421AB',
+        'oversold_items': ['Blue Shirt', 'Red Shirt']}
+    event = OrderEvent(
+        user=admin_user, order=order, parameters=parameters, type=type)
+    event.get_event_display()

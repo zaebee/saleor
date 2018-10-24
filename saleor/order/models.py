@@ -3,40 +3,59 @@ from operator import attrgetter
 from uuid import uuid4
 
 from django.conf import settings
-from django.core.validators import MaxValueValidator, MinValueValidator
+from django.contrib.postgres.fields import JSONField
+from django.core.validators import MinValueValidator
 from django.db import models
-from django.db.models import F, Max, Sum
+from django.db.models import ExpressionWrapper, F, Max, Sum
 from django.urls import reverse
 from django.utils.timezone import now
 from django.utils.translation import pgettext_lazy
+from django_measurement.models import MeasurementField
 from django_prices.models import MoneyField, TaxedMoneyField
+from measurement.measures import Weight
 from payments import PaymentStatus, PurchasedItem
 from payments.models import BasePayment
 from prices import Money, TaxedMoney
 
-from . import FulfillmentStatus, OrderStatus
+from . import FulfillmentStatus, OrderEvents, OrderStatus, display_order_event
 from ..account.models import Address
-from ..core.models import BaseNote
 from ..core.utils import build_absolute_uri
+from ..core.utils.json_serializer import CustomJsonEncoder
 from ..core.utils.taxes import ZERO_TAXED_MONEY
+from ..core.weight import WeightUnits, zero_weight
 from ..discount.models import Voucher
-from ..product.models import ProductVariant
-from ..shipping.models import ShippingMethodCountry
+from ..shipping.models import ShippingMethod
 
 
 class OrderQueryset(models.QuerySet):
     def confirmed(self):
+        """Return non-draft orders."""
         return self.exclude(status=OrderStatus.DRAFT)
 
     def drafts(self):
+        """Return draft orders."""
         return self.filter(status=OrderStatus.DRAFT)
 
-    def to_ship(self):
-        """Fully paid but unfulfilled (or partially fulfilled) orders."""
+    def ready_to_fulfill(self):
+        """Return orders that can be fulfilled.
+
+        Orders ready to fulfill are fully paid but unfulfilled (or partially
+        fulfilled).
+        """
         statuses = {OrderStatus.UNFULFILLED, OrderStatus.PARTIALLY_FULFILLED}
         return self.filter(status__in=statuses).annotate(
             amount_paid=Sum('payments__captured_amount')).filter(
                 total_gross__lte=F('amount_paid'))
+
+    def ready_to_capture(self):
+        """Return orders with payments to capture.
+
+        Orders ready to capture are those which are not draft or canceled and
+        have a preauthorized payment.
+        """
+        qs = self.filter(payments__status=PaymentStatus.PREAUTH)
+        qs = qs.exclude(status={OrderStatus.DRAFT, OrderStatus.CANCELED})
+        return qs.distinct()
 
 
 class Order(models.Model):
@@ -60,7 +79,7 @@ class Order(models.Model):
         on_delete=models.SET_NULL)
     user_email = models.EmailField(blank=True, default='')
     shipping_method = models.ForeignKey(
-        ShippingMethodCountry, blank=True, null=True, related_name='orders',
+        ShippingMethod, blank=True, null=True, related_name='orders',
         on_delete=models.SET_NULL)
     shipping_price_net = MoneyField(
         currency=settings.DEFAULT_CURRENCY, max_digits=12,
@@ -89,8 +108,13 @@ class Order(models.Model):
         currency=settings.DEFAULT_CURRENCY, max_digits=12,
         decimal_places=settings.DEFAULT_DECIMAL_PLACES, default=0)
     discount_name = models.CharField(max_length=255, default='', blank=True)
+    translated_discount_name = models.CharField(
+        max_length=255, default='', blank=True)
     display_gross_prices = models.BooleanField(default=True)
-
+    customer_note = models.TextField(blank=True, default='')
+    weight = MeasurementField(
+        measurement=Weight, unit_choices=WeightUnits.CHOICES,
+        default=zero_weight)
     objects = OrderQueryset.as_manager()
 
     class Meta:
@@ -107,7 +131,7 @@ class Order(models.Model):
     def is_fully_paid(self):
         total_paid = sum(
             [
-                payment.get_total_price() for payment in
+                payment.get_total() for payment in
                 self.payments.filter(status=PaymentStatus.CONFIRMED)],
             ZERO_TAXED_MONEY)
         return total_paid.gross >= self.total.gross
@@ -176,21 +200,29 @@ class Order(models.Model):
     def can_cancel(self):
         return self.status not in {OrderStatus.CANCELED, OrderStatus.DRAFT}
 
+    def get_total_weight(self):
+        # Cannot use `sum` as it parses an empty Weight to an int
+        weights = Weight(kg=0)
+        for line in self:
+            weights += line.variant.get_weight() * line.quantity
+        return weights
+
 
 class OrderLine(models.Model):
     order = models.ForeignKey(
         Order, related_name='lines', editable=False, on_delete=models.CASCADE)
     variant = models.ForeignKey(
-        ProductVariant, related_name='+', on_delete=models.SET_NULL,
-        blank=True, null=True)
+        'product.ProductVariant', related_name='order_lines',
+        on_delete=models.SET_NULL, blank=True, null=True)
     # max_length is as produced by ProductVariant's display_product method
     product_name = models.CharField(max_length=386)
+    translated_product_name = models.CharField(
+        max_length=386, default='', blank=True)
     product_sku = models.CharField(max_length=32)
     is_shipping_required = models.BooleanField()
-    quantity = models.IntegerField(
-        validators=[MinValueValidator(0), MaxValueValidator(999)])
+    quantity = models.IntegerField(validators=[MinValueValidator(1)])
     quantity_fulfilled = models.IntegerField(
-        validators=[MinValueValidator(0), MaxValueValidator(999)], default=0)
+        validators=[MinValueValidator(0)], default=0)
     unit_price_net = MoneyField(
         currency=settings.DEFAULT_CURRENCY, max_digits=12,
         decimal_places=settings.DEFAULT_DECIMAL_PLACES)
@@ -257,8 +289,7 @@ class FulfillmentLine(models.Model):
         OrderLine, related_name='+', on_delete=models.CASCADE)
     fulfillment = models.ForeignKey(
         Fulfillment, related_name='lines', on_delete=models.CASCADE)
-    quantity = models.IntegerField(
-        validators=[MinValueValidator(0), MaxValueValidator(999)])
+    quantity = models.IntegerField(validators=[MinValueValidator(1)])
 
 
 class Payment(BasePayment):
@@ -297,7 +328,7 @@ class Payment(BasePayment):
                     currency=self.order.discount_amount.currency))
         return lines
 
-    def get_total_price(self):
+    def get_total(self):
         return TaxedMoney(
             net=Money(self.total - self.tax, self.currency),
             gross=Money(self.total, self.currency))
@@ -306,22 +337,30 @@ class Payment(BasePayment):
         return Money(self.captured_amount, self.currency)
 
 
-class OrderHistoryEntry(models.Model):
+class OrderEvent(models.Model):
+    """Model used to store events that happened during the order lifecycle.
+
+        Args:
+            parameters: Values needed to display the event on the storefront
+            type: Type of an order
+    """
     date = models.DateTimeField(default=now, editable=False)
+    type = models.CharField(
+        max_length=255,
+        choices=((event.name, event.value) for event in OrderEvents))
     order = models.ForeignKey(
-        Order, related_name='history', on_delete=models.CASCADE)
-    content = models.TextField()
+        Order, related_name='events', on_delete=models.CASCADE)
+    parameters = JSONField(
+        blank=True, default=dict, encoder=CustomJsonEncoder)
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, blank=True, null=True,
-        on_delete=models.SET_NULL)
+        on_delete=models.SET_NULL, related_name='+')
 
     class Meta:
         ordering = ('date', )
 
+    def __repr__(self):
+        return 'OrderEvent(type=%r, user=%r)' % (self.type, self.user)
 
-class OrderNote(BaseNote):
-    order = models.ForeignKey(
-        Order, related_name='notes', on_delete=models.CASCADE)
-
-    class Meta:
-        ordering = ('date', )
+    def get_event_display(self):
+        return display_order_event(self)

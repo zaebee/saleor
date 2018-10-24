@@ -4,7 +4,7 @@ import i18naddress
 from django import forms
 from django.forms.forms import BoundField
 from django.utils.translation import pgettext_lazy
-from django_countries.data import COUNTRIES
+from django_countries import countries
 from phonenumber_field.formfields import PhoneNumberField
 
 from .models import Address
@@ -13,7 +13,6 @@ from .widgets import DatalistTextWidget, PhonePrefixWidget
 
 COUNTRY_FORMS = {}
 UNKNOWN_COUNTRIES = set()
-
 
 AREA_TYPE_TRANSLATIONS = {
     'area': pgettext_lazy('Address field', 'Area'),
@@ -61,9 +60,7 @@ class AddressMetaForm(forms.ModelForm):
     class Meta:
         model = Address
         fields = ['country', 'preview']
-        labels = {
-            'country': pgettext_lazy(
-                'Country', 'Country')}
+        labels = {'country': pgettext_lazy('Country', 'Country')}
 
     def clean(self):
         data = super().clean()
@@ -101,8 +98,7 @@ class AddressForm(forms.ModelForm):
                 'Company or organization', 'Company or organization'),
             'street_address_1': pgettext_lazy(
                 'Address', 'Address'),
-            'street_address_2': pgettext_lazy(
-                'Address', 'Address'),
+            'street_address_2': '',
             'city': pgettext_lazy(
                 'City', 'City'),
             'city_area': pgettext_lazy(
@@ -115,6 +111,11 @@ class AddressForm(forms.ModelForm):
                 'Country area', 'State or province'),
             'phone': pgettext_lazy(
                 'Phone number', 'Phone number')}
+        placeholders = {
+            'street_address_1': pgettext_lazy(
+                'Address', 'Street address, P.O. box, company name'),
+            'street_address_2': pgettext_lazy(
+                'Address', 'Apartment, suite, unit, building, floor, etc')}
 
     phone = PossiblePhoneNumberFormField(
         widget=PhonePrefixWidget, required=False)
@@ -135,6 +136,8 @@ class AddressForm(forms.ModelForm):
             else:
                 autocomplete = autocomplete_dict[field_name]
             field.widget.attrs['autocomplete'] = autocomplete
+            field.widget.attrs['placeholder'] = field.label if not hasattr(
+                field, 'placeholder') else field.placeholder
 
 
 class CountryAwareAddressForm(AddressForm):
@@ -217,6 +220,10 @@ def update_base_fields(form_class, i18n_rules):
         field = form_class.base_fields[field_name]
         field.label = label_value
 
+    for field_name, placeholder_value in AddressForm.Meta.placeholders.items():
+        field = form_class.base_fields[field_name]
+        field.placeholder = placeholder_value
+
     if i18n_rules.country_area_choices:
         form_class.base_fields['country_area'] = CountryAreaChoiceField(
             choices=i18n_rules.country_area_choices)
@@ -245,14 +252,14 @@ def construct_address_form(country_code, i18n_rules):
     form_kwargs = {
         'Meta': type(str('Meta'), (base_class.Meta, object), {}),
         'formfield_callback': None}
-    class_ = type(base_class)(str(class_name), (base_class,), form_kwargs)
+    class_ = type(base_class)(str(class_name), (base_class, ), form_kwargs)
     update_base_fields(class_, i18n_rules)
     class_.i18n_country_code = country_code
     class_.i18n_fields_order = property(get_form_i18n_lines)
     return class_
 
 
-for country in COUNTRIES.keys():
+for country in countries.countries.keys():
     try:
         country_rules = i18naddress.get_validation_rules(
             {'country_code': country})
@@ -260,7 +267,7 @@ for country in COUNTRIES.keys():
         country_rules = i18naddress.get_validation_rules({})
         UNKNOWN_COUNTRIES.add(country)
 
-COUNTRY_CHOICES = [(code, label) for code, label in COUNTRIES.items()
+COUNTRY_CHOICES = [(code, label) for code, label in countries.countries.items()
                    if code not in UNKNOWN_COUNTRIES]
 # Sort choices list by country name
 COUNTRY_CHOICES = sorted(COUNTRY_CHOICES, key=lambda choice: choice[1])

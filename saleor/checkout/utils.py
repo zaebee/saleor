@@ -25,7 +25,7 @@ from ..discount.utils import (
     get_products_voucher_discount, get_shipping_voucher_discount,
     get_value_voucher_discount, increase_voucher_usage)
 from ..order.models import Order
-from ..shipping.models import ShippingMethodCountry
+from ..shipping.models import ShippingMethod
 from .forms import (
     AddressChoiceForm, AnonymousUserBillingForm, AnonymousUserShippingForm,
     BillingAddressChoiceForm)
@@ -654,14 +654,14 @@ def _get_shipping_voucher_discount_for_cart(voucher, cart):
         raise NotApplicable(msg)
     not_valid_for_country = all([
         voucher.countries, ANY_COUNTRY not in voucher.countries,
-        shipping_method.country_code not in voucher.countries])
+        cart.shipping_address.country.code not in voucher.countries])
     if not_valid_for_country:
         msg = pgettext(
             'Voucher not applicable',
             'This offer is not valid in your country.')
         raise NotApplicable(msg)
     return get_shipping_voucher_discount(
-        voucher, cart.get_subtotal(), shipping_method.get_total_price())
+        voucher, cart.get_subtotal(), shipping_method.get_total())
 
 
 def _get_products_voucher_discount(order_or_cart, voucher):
@@ -726,8 +726,14 @@ def recalculate_cart_discount(cart, discounts, taxes):
         else:
             subtotal = cart.get_subtotal(discounts, taxes).gross
             cart.discount_amount = min(discount, subtotal)
-            cart.discount_name = voucher.name
-            cart.save(update_fields=['discount_amount', 'discount_name'])
+            cart.discount_name = str(voucher)
+            cart.translated_discount_name = (
+                voucher.translated.name
+                if voucher.translated.name != voucher.name else '')
+            cart.save(
+                update_fields=[
+                    'translated_discount_name',
+                    'discount_amount', 'discount_name'])
     else:
         remove_voucher_from_cart(cart)
 
@@ -736,9 +742,12 @@ def remove_voucher_from_cart(cart):
     """Remove voucher data from cart."""
     cart.voucher_code = None
     cart.discount_name = None
+    cart.translated_discount_name = None
     cart.discount_amount = ZERO_MONEY
-    cart.save(update_fields=[
-        'voucher_code', 'discount_name', 'discount_amount'])
+    cart.save(
+        update_fields=[
+            'voucher_code', 'discount_name', 'translated_discount_name',
+            'discount_amount'])
 
 
 def get_taxes_for_cart(cart, default_taxes):
@@ -752,16 +761,24 @@ def get_taxes_for_cart(cart, default_taxes):
     return default_taxes
 
 
-def check_shipping_method(cart):
-    """Check if shipping method is valid for address and remove (if not)."""
-    country_code = cart.shipping_address.country.code
-    valid_methods = ShippingMethodCountry.objects.select_related(
-        'shipping_method').unique_for_country_code(country_code)
+def is_valid_shipping_method(cart, taxes, discounts):
+    """Check if shipping method is valid and remove (if not)."""
+    if not cart.shipping_method:
+        return False
+
+    valid_methods = ShippingMethod.objects.applicable_shipping_methods(
+        price=cart.get_subtotal(discounts, taxes).gross,
+        weight=cart.get_total_weight(),
+        country_code=cart.shipping_address.country.code)
     if cart.shipping_method not in valid_methods:
-        cart.shipping_method = None
-        cart.save()
+        clear_shipping_method(cart)
         return False
     return True
+
+
+def clear_shipping_method(cart):
+    cart.shipping_method = None
+    cart.save(update_fields=['shipping_method'])
 
 
 def _process_voucher_data_for_order(cart):
@@ -782,7 +799,8 @@ def _process_voucher_data_for_order(cart):
     return {
         'voucher': voucher,
         'discount_amount': cart.discount_amount,
-        'discount_name': cart.discount_name}
+        'discount_name': cart.discount_name,
+        'translated_discount_name': cart.translated_discount_name}
 
 
 def _process_shipping_data_for_order(cart, taxes):
@@ -801,7 +819,8 @@ def _process_shipping_data_for_order(cart, taxes):
         'shipping_address': shipping_address,
         'shipping_method': cart.shipping_method,
         'shipping_method_name': smart_text(cart.shipping_method),
-        'shipping_price': cart.get_shipping_price(taxes)}
+        'shipping_price': cart.get_shipping_price(taxes),
+        'weight': cart.get_total_weight()}
 
 
 def _process_user_data_for_order(cart):
@@ -828,7 +847,8 @@ def _fill_order_with_cart_data(order, cart, discounts, taxes):
             order, line.variant, line.quantity, discounts, taxes)
 
     if cart.note:
-        order.notes.create(user=order.user, content=cart.note)
+        order.customer_note = cart.note
+        order.save(update_fields=['customer_note'])
 
 
 @transaction.atomic

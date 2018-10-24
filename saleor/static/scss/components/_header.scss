@@ -53,11 +53,6 @@
           background-color: $white;
           text-align: left;
 
-          .container {
-            padding: $global-padding;
-            max-height: 28rem;
-          }
-
           a {
             padding: 0;
             font-size: initial;
@@ -65,16 +60,23 @@
             text-decoration: none;
           }
 
-          ul {
-            min-width: 120px;
-            width: 360px;
+          .container {
+            padding: $global-padding;
+            max-height: 28rem;
 
-            li {
-              display: inline-block;
-              max-width: 110px;
+            > ul {
+              min-width: 120px;
+              width: 360px;
+              display: flex;
+              flex-wrap: wrap;
 
-              &:not(:last-child) {
-                margin-right: $global-padding * 2;
+              li {
+                display: inline-block;
+                max-width: 110px;
+
+                &:not(:last-child) {
+                  margin-right: $global-padding * 2;
+                }
               }
             }
           }

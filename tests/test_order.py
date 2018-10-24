@@ -9,11 +9,11 @@ from tests.utils import get_redirect_location
 
 from saleor.account.models import User
 from saleor.checkout.utils import create_order
+from saleor.core.exceptions import InsufficientStock
 from saleor.core.utils.taxes import (
     DEFAULT_TAX_RATE_NAME, get_tax_rate_by_name, get_taxes_for_country)
 from saleor.order import FulfillmentStatus, OrderStatus, models
-from saleor.order.forms import OrderNoteForm
-from saleor.order.models import Order
+from saleor.order.models import Order, Payment
 from saleor.order.utils import (
     add_variant_to_order, cancel_fulfillment, cancel_order, recalculate_order,
     restock_fulfillment_lines, restock_order_lines, update_order_prices,
@@ -64,11 +64,11 @@ def test_get_tax_rate_by_name_empty_taxes(product):
 
 
 def test_add_variant_to_order_adds_line_for_new_variant(
-        order_with_lines, product, taxes):
+        order_with_lines, product, taxes, product_translation_fr, settings):
     order = order_with_lines
     variant = product.variants.get()
     lines_before = order.lines.count()
-
+    settings.LANGUAGE_CODE = 'fr'
     add_variant_to_order(order, variant, 1, taxes=taxes)
 
     line = order.lines.last()
@@ -78,6 +78,8 @@ def test_add_variant_to_order_adds_line_for_new_variant(
     assert line.unit_price == TaxedMoney(
         net=Money('8.13', 'USD'), gross=Money(10, 'USD'))
     assert line.tax_rate == taxes[product.tax_rate]['value']
+    assert line.translated_product_name == variant.display_product(
+        translated=True)
 
 
 @pytest.mark.parametrize('track_inventory', (True, False))
@@ -125,6 +127,22 @@ def test_add_variant_to_order_allocates_stock_for_existing_variant(
     assert variant.quantity_allocated == stock_before + 1
 
 
+def test_add_variant_to_order_allow_overselling(order_with_lines):
+    existing_line = order_with_lines.lines.first()
+    variant = existing_line.variant
+    stock_before = variant.quantity_allocated
+
+    quantity = variant.quantity + 1
+    with pytest.raises(InsufficientStock):
+        add_variant_to_order(
+            order_with_lines, variant, quantity, allow_overselling=False)
+
+    add_variant_to_order(
+        order_with_lines, variant, quantity, allow_overselling=True)
+    variant.refresh_from_db()
+    assert variant.quantity_allocated == stock_before + quantity
+
+
 def test_view_connect_order_with_user_authorized_user(
         order, authorized_client, customer_user):
     order.user_email = customer_user.email
@@ -160,13 +178,29 @@ def test_view_connect_order_with_user_different_email(
     assert order.user is None
 
 
-def test_add_note_to_order(order_with_lines):
+def test_view_order_with_deleted_variant(authorized_client, order_with_lines):
     order = order_with_lines
-    note = models.OrderNote(order=order, user=order.user)
-    note_form = OrderNoteForm({'content': 'test_note'}, instance=note)
-    note_form.is_valid()
-    note_form.save()
-    assert order.notes.first().content == 'test_note'
+    order_details_url = reverse('order:details', kwargs={'token': order.token})
+
+    # delete a variant associated to the order
+    order.lines.first().variant.delete()
+
+    # check if the order details view handles the deleted variant
+    response = authorized_client.get(order_details_url)
+    assert response.status_code == 200
+
+
+def test_view_fulfilled_order_with_deleted_variant(
+        authorized_client, fulfilled_order):
+    order = fulfilled_order
+    order_details_url = reverse('order:details', kwargs={'token': order.token})
+
+    # delete a variant associated to the order
+    order.lines.first().variant.delete()
+
+    # check if the order details view handles the deleted variant
+    response = authorized_client.get(order_details_url)
+    assert response.status_code == 200
 
 
 @pytest.mark.parametrize('track_inventory', (True, False))
@@ -346,10 +380,30 @@ def test_order_queryset_to_ship():
         Order.objects.create(status=OrderStatus.CANCELED, total=total)
     ]
 
-    orders = Order.objects.to_ship()
+    orders = Order.objects.ready_to_fulfill()
 
     assert all([order in orders for order in orders_to_ship])
     assert all([order not in orders for order in orders_not_to_ship])
+
+
+def test_queryset_ready_to_capture():
+    total = TaxedMoney(net=Money(10, 'USD'), gross=Money(15, 'USD'))
+
+    preauth_order = Order.objects.create(
+        status=OrderStatus.UNFULFILLED, total=total)
+    Payment.objects.create(order=preauth_order, status=PaymentStatus.PREAUTH)
+
+    orders = [
+        Order.objects.create(status=OrderStatus.DRAFT, total=total),
+        Order.objects.create(status=OrderStatus.UNFULFILLED, total=total),
+        preauth_order,
+        Order.objects.create(status=OrderStatus.CANCELED, total=total)]
+
+    qs = Order.objects.ready_to_capture()
+    assert preauth_order in qs
+    statuses = [o.status for o in qs]
+    assert OrderStatus.DRAFT not in statuses
+    assert OrderStatus.CANCELED not in statuses
 
 
 def test_update_order_prices(order_with_lines):
@@ -362,7 +416,7 @@ def test_update_order_prices(order_with_lines):
     line_2 = order_with_lines.lines.last()
     price_1 = line_1.variant.get_price(taxes=taxes)
     price_2 = line_2.variant.get_price(taxes=taxes)
-    shipping_price = order_with_lines.shipping_method.get_total_price(taxes)
+    shipping_price = order_with_lines.shipping_method.get_total(taxes)
 
     update_order_prices(order_with_lines, None)
 
@@ -377,12 +431,12 @@ def test_update_order_prices(order_with_lines):
 
 
 def test_order_payment_flow(
-        request_cart_with_item, client, address, shipping_method):
+        request_cart_with_item, client, address, shipping_zone):
     request_cart_with_item.shipping_address = address
     request_cart_with_item.billing_address = address.get_copy()
     request_cart_with_item.email = 'test@example.com'
     request_cart_with_item.shipping_method = (
-        shipping_method.price_per_country.first())
+        shipping_zone.shipping_methods.first())
     request_cart_with_item.save()
 
     order = create_order(
@@ -443,3 +497,24 @@ def test_create_user_after_order(order, client):
     user = User.objects.filter(email='hello@mirumee.com').first()
     assert user is not None
     assert user.orders.filter(token=order.token).exists()
+
+
+def test_view_order_details(order, client):
+    url = reverse('order:details', kwargs={'token': order.token})
+    response = client.get(url)
+    assert response.status_code == 200
+
+
+def test_add_order_note_view(order, authorized_client, customer_user):
+    order.user_email = customer_user.email
+    order.save()
+    url = reverse('order:details', kwargs={'token': order.token})
+    customer_note = 'bla-bla note'
+    data = {'customer_note': customer_note}
+
+    response = authorized_client.post(url, data)
+
+    redirect_url = reverse('order:details', kwargs={'token': order.token})
+    assert get_redirect_location(response) == redirect_url
+    order.refresh_from_db()
+    assert order.customer_note == customer_note

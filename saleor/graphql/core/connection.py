@@ -1,6 +1,6 @@
 import graphene
 from graphene import Field, List, NonNull, ObjectType, String
-from graphene.relay.connection import Connection, ConnectionOptions
+from graphene.relay.connection import Connection
 
 
 class NonNullConnection(Connection):
@@ -13,7 +13,7 @@ class NonNullConnection(Connection):
         super().__init_subclass_with_meta__(node=node, name=name, **options)
 
         # Override the original EdgeBase type to make to `node` field required.
-        class EdgeBase(object):
+        class EdgeBase:
             node = Field(
                 cls._meta.node, description='The item at the end of the edge',
                 required=True)

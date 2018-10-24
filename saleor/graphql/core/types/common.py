@@ -1,31 +1,34 @@
 import decimal
 
 import graphene
-from graphene.types import Scalar
 from graphene_django import DjangoObjectType
-from graphql.language import ast
+from saleor.core.permissions import MODELS_PERMISSIONS
+from saleor.graphql.core.utils import str_to_enum
 
+from ....core import weight
 from ..connection import CountableConnection
 
 
-# FIXME: not yet merged https://github.com/graphql-python/graphene/pull/726
-class Decimal(Scalar):
-    """The `Decimal` scalar type represents a python Decimal."""
+class ReportingPeriod(graphene.Enum):
+    TODAY = 'TODAY'
+    THIS_MONTH = 'THIS_MONTH'
 
-    @staticmethod
-    def serialize(dec):
-        assert isinstance(dec, decimal.Decimal), (
-            'Received not compatible Decimal "{}"'.format(repr(dec)))
-        return str(dec)
+
+class Decimal(graphene.Float):
+    """Custom Decimal implementation.
+    Returns Decimal as a float in the API,
+    parses float to the Decimal on the way back.
+    """
 
     @staticmethod
     def parse_value(value):
-        return decimal.Decimal(value)
-
-    @classmethod
-    def parse_literal(cls, node):
-        if isinstance(node, ast.StringValue):
-            return cls.parse_value(node.value)
+        try:
+            # Converting the float to str before parsing it to Decimal is
+            # necessary to keep the decimal places as typed
+            value = str(value)
+            return decimal.Decimal(value)
+        except decimal.DecimalException:
+            return None
 
 
 class CountryDisplay(graphene.ObjectType):
@@ -63,8 +66,14 @@ class LanguageDisplay(graphene.ObjectType):
     language = graphene.String(description='Language.', required=True)
 
 
+PermissionEnum = graphene.Enum(
+    'PermissionEnum', [
+        (str_to_enum(codename.split('.')[1]), codename)
+        for codename in MODELS_PERMISSIONS])
+
+
 class PermissionDisplay(graphene.ObjectType):
-    code = graphene.String(
+    code = PermissionEnum(
         description='Internal code for permission.', required=True)
     name = graphene.String(
         description='Describe action(s) allowed to do by permission.',
@@ -77,3 +86,14 @@ class PermissionDisplay(graphene.ObjectType):
 class SeoInput(graphene.InputObjectType):
     title = graphene.String(description='SEO title.')
     description = graphene.String(description='SEO description.')
+
+
+class Weight(graphene.ObjectType):
+    unit = graphene.String(description='Weight unit', required=True)
+    value = graphene.Float(description='Weight value', required=True)
+
+    class Meta:
+        description = 'Represents weight value in a specific weight unit.'
+
+
+WeightUnitsEnum = graphene.Enum.from_enum(weight.WeightUnitsEnum)

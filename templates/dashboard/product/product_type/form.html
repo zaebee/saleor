@@ -1,7 +1,7 @@
 {% extends "dashboard/base.html" %}
 {% load i18n %}
 {% load materializecss %}
-{% load staticfiles %}
+{% load static %}
 
 {% block title %}
   {% if product_type.pk %}
@@ -96,6 +96,14 @@
               </div>
               <div class="col s12 m8">
                 {{ form.tax_rate|materializecss }}
+              </div>
+            </div>
+            <div class="row">
+              <div class="col s12">
+                <span class="card-title">{% trans "Shipping" %}</span>
+              </div>
+              <div class="col s12 m8">
+                {{ form.weight|materializecss }}
               </div>
             </div>
           </div>

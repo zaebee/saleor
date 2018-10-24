@@ -1,10 +1,10 @@
 {% load i18n %}
-{% load staticfiles %}
+{% load static %}
 
 <div class="product-filters">
   <div class="product-filters__title">
     <h2>
-      <strong>{{ object }}</strong>
+      <strong>{{ object.translated }}</strong>
     </h2>
     {% block title_tree %}{% endblock title_tree %}
   </div>

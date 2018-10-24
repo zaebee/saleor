@@ -9,9 +9,8 @@ from django.forms.models import model_to_dict
 from django.utils import timezone
 from django.utils.translation import pgettext_lazy
 from django_countries.fields import Country, CountryField
-from phonenumber_field.modelfields import PhoneNumberField
+from phonenumber_field.modelfields import PhoneNumber, PhoneNumberField
 
-from ..core.models import BaseNote
 from .validators import validate_possible_number
 
 
@@ -64,6 +63,8 @@ class Address(models.Model):
         data = model_to_dict(self, exclude=['id', 'user'])
         if isinstance(data['country'], Country):
             data['country'] = data['country'].code
+        if isinstance(data['phone'], PhoneNumber):
+            data['phone'] = data['phone'].as_e164
         return data
 
     def get_copy(self):
@@ -151,7 +152,13 @@ class User(PermissionsMixin, AbstractBaseUser):
         return self.email
 
 
-class CustomerNote(BaseNote):
+class CustomerNote(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, blank=True, null=True,
+        on_delete=models.SET_NULL)
+    date = models.DateTimeField(db_index=True, auto_now_add=True)
+    content = models.TextField()
+    is_public = models.BooleanField(default=True)
     customer = models.ForeignKey(
         settings.AUTH_USER_MODEL, related_name='notes',
         on_delete=models.CASCADE)

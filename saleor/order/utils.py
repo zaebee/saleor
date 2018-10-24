@@ -1,6 +1,8 @@
 from functools import wraps
 
+from django.conf import settings
 from django.shortcuts import get_object_or_404, redirect
+from prices import Money, TaxedMoney
 
 from ..account.utils import store_user_address
 from ..checkout import AddressType
@@ -86,7 +88,7 @@ def update_order_prices(order, discounts):
             line.save()
 
     if order.shipping_method:
-        order.shipping_price = order.shipping_method.get_total_price(taxes)
+        order.shipping_price = order.shipping_method.get_total(taxes)
         order.save()
 
     recalculate_order(order)
@@ -148,36 +150,46 @@ def attach_order_to_user(order, user):
     order.save(update_fields=['user'])
 
 
-def add_variant_to_order(order, variant, quantity, discounts=None, taxes=None):
+def add_variant_to_order(
+        order, variant, quantity, discounts=None, taxes=None,
+        allow_overselling=False, track_inventory=True):
     """Add total_quantity of variant to order.
 
-    Raises InsufficientStock exception if quantity could not be fulfilled.
-    """
-    variant.check_quantity(quantity)
+    Returns an order line the variant was added to.
 
+    By default, raises InsufficientStock exception if  quantity could not be
+    fulfilled. This can be disabled by setting `allow_overselling` to True.
+    """
+    if not allow_overselling:
+        variant.check_quantity(quantity)
     try:
         line = order.lines.get(variant=variant)
         line.quantity += quantity
         line.save(update_fields=['quantity'])
     except OrderLine.DoesNotExist:
-        order.lines.create(
-            product_name=variant.display_product(),
+        product_name = variant.display_product()
+        translated_product_name = variant.display_product(translated=True)
+        if translated_product_name == product_name:
+            translated_product_name = ''
+        line = order.lines.create(
+            product_name=product_name,
+            translated_product_name=translated_product_name,
             product_sku=variant.sku,
             is_shipping_required=variant.is_shipping_required(),
             quantity=quantity,
             variant=variant,
             unit_price=variant.get_price(discounts, taxes),
             tax_rate=get_tax_rate_by_name(variant.product.tax_rate, taxes))
-
-    if variant.track_inventory:
+    if variant.track_inventory and track_inventory:
         allocate_stock(variant, quantity)
+    return line
 
 
 def change_order_line_quantity(line, new_quantity):
     """Change the quantity of ordered items in a order line."""
     if new_quantity:
         line.quantity = new_quantity
-        line.save()
+        line.save(update_fields=['quantity'])
     else:
         line.delete()
 
@@ -202,3 +214,9 @@ def restock_fulfillment_lines(fulfillment):
         if line.order_line.variant and line.order_line.variant.track_inventory:
             increase_stock(
                 line.order_line.variant, line.quantity, allocate=True)
+
+
+def sum_order_totals(qs):
+    zero = Money(0, currency=settings.DEFAULT_CURRENCY)
+    taxed_zero = TaxedMoney(zero, zero)
+    return sum([order.total for order in qs], taxed_zero)
