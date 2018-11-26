@@ -39,6 +39,7 @@ function loadStories() {
   require("./stories/categories/CategoryListPage");
 
   // Collections
+  require("./stories/collections/CollectionCreatePage");
   require("./stories/collections/CollectionDetailsPage");
   require("./stories/collections/CollectionListPage");
 
@@ -46,9 +47,12 @@ function loadStories() {
   require("./stories/configuration/ConfigurationPage");
 
   // Customers
+  require("./stories/customers/CustomerCreatePage");
   require("./stories/customers/CustomerDetailsPage");
-  require("./stories/customers/CustomerEditPage");
   require("./stories/customers/CustomerListPage");
+
+  // Homepage
+  require("./stories/home/HomePage");
 
   // Staff
   require("./stories/staff/StaffListPage");
@@ -75,14 +79,17 @@ function loadStories() {
   require("./stories/orders/OrderCustomer");
   require("./stories/orders/OrderCustomerEditDialog");
   require("./stories/orders/OrderDetailsPage");
+  require("./stories/orders/OrderDraftCancelDialog");
+  require("./stories/orders/OrderDraftFinalizeDialog");
   require("./stories/orders/OrderDraftPage");
   require("./stories/orders/OrderFulfillmentCancelDialog");
   require("./stories/orders/OrderFulfillmentDialog");
   require("./stories/orders/OrderFulfillmentTrackingDialog");
   require("./stories/orders/OrderHistory");
   require("./stories/orders/OrderListPage");
+  require("./stories/orders/OrderMarkAsPaidDialog");
   require("./stories/orders/OrderPaymentDialog");
-  require("./stories/orders/OrderPaymentReleaseDialog");
+  require("./stories/orders/OrderPaymentVoidDialog");
   require("./stories/orders/OrderProductAddDialog");
   require("./stories/orders/OrderShippingMethodEditDialog");
 

@@ -1,11 +1,11 @@
 import graphene
+import graphene_django_optimizer as gql_optimizer
 
-from ...order import models, OrderStatus, OrderEvents
+from ...order import OrderEvents, OrderStatus, models
 from ...order.utils import sum_order_totals
 from ...shipping import models as shipping_models
-from ..utils import filter_by_query_param, filter_by_period
+from ..utils import filter_by_period, filter_by_query_param
 from .types import Order, OrderStatusFilter
-
 
 ORDER_SEARCH_FIELDS = (
     'id', 'discount_name', 'token', 'user_email', 'user__email')
@@ -30,7 +30,7 @@ def resolve_orders(info, created, status, query):
     if created is not None:
         qs = filter_by_period(qs, created, 'created')
 
-    return qs.prefetch_related('lines').distinct()
+    return gql_optimizer.query(qs, info)
 
 
 def resolve_orders_total(info, period):
@@ -48,7 +48,7 @@ def resolve_order(info, id):
     return None
 
 
-def resolve_shipping_methods(obj, info):
+def resolve_shipping_methods(obj, info, price):
     if not obj.is_shipping_required():
         return None
     if not obj.shipping_address:
@@ -56,7 +56,7 @@ def resolve_shipping_methods(obj, info):
 
     qs = shipping_models.ShippingMethod.objects
     return qs.applicable_shipping_methods(
-        price=obj.get_subtotal().gross.amount, weight=obj.get_total_weight(),
+        price=price, weight=obj.get_total_weight(),
         country_code=obj.shipping_address.country.code)
 
 

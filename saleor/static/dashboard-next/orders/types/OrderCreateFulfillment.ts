@@ -1,7 +1,7 @@
 /* tslint:disable */
 // This file was automatically generated and should not be edited.
 
-import { FulfillmentCreateInput, OrderEventsEmails, OrderEvents, FulfillmentStatus, PaymentStatusEnum, OrderStatus } from "./../../types/globalTypes";
+import { FulfillmentCreateInput, OrderEventsEmails, OrderEvents, FulfillmentStatus, PaymentChargeStatusEnum, OrderStatus, OrderAction } from "./../../types/globalTypes";
 
 // ====================================================
 // GraphQL mutation operation: OrderCreateFulfillment
@@ -53,56 +53,46 @@ export interface OrderCreateFulfillment_orderFulfillmentCreate_order_events {
   user: OrderCreateFulfillment_orderFulfillmentCreate_order_events_user | null;
 }
 
-export interface OrderCreateFulfillment_orderFulfillmentCreate_order_fulfillments_lines_edges_node_orderLine_unitPrice_gross {
+export interface OrderCreateFulfillment_orderFulfillmentCreate_order_fulfillments_lines_orderLine_unitPrice_gross {
   __typename: "Money";
   amount: number;
   currency: string;
 }
 
-export interface OrderCreateFulfillment_orderFulfillmentCreate_order_fulfillments_lines_edges_node_orderLine_unitPrice_net {
+export interface OrderCreateFulfillment_orderFulfillmentCreate_order_fulfillments_lines_orderLine_unitPrice_net {
   __typename: "Money";
   amount: number;
   currency: string;
 }
 
-export interface OrderCreateFulfillment_orderFulfillmentCreate_order_fulfillments_lines_edges_node_orderLine_unitPrice {
+export interface OrderCreateFulfillment_orderFulfillmentCreate_order_fulfillments_lines_orderLine_unitPrice {
   __typename: "TaxedMoney";
-  gross: OrderCreateFulfillment_orderFulfillmentCreate_order_fulfillments_lines_edges_node_orderLine_unitPrice_gross;
-  net: OrderCreateFulfillment_orderFulfillmentCreate_order_fulfillments_lines_edges_node_orderLine_unitPrice_net;
+  gross: OrderCreateFulfillment_orderFulfillmentCreate_order_fulfillments_lines_orderLine_unitPrice_gross;
+  net: OrderCreateFulfillment_orderFulfillmentCreate_order_fulfillments_lines_orderLine_unitPrice_net;
 }
 
-export interface OrderCreateFulfillment_orderFulfillmentCreate_order_fulfillments_lines_edges_node_orderLine {
+export interface OrderCreateFulfillment_orderFulfillmentCreate_order_fulfillments_lines_orderLine {
   __typename: "OrderLine";
   id: string;
   productName: string;
   productSku: string;
   quantity: number;
   quantityFulfilled: number;
-  unitPrice: OrderCreateFulfillment_orderFulfillmentCreate_order_fulfillments_lines_edges_node_orderLine_unitPrice | null;
+  unitPrice: OrderCreateFulfillment_orderFulfillmentCreate_order_fulfillments_lines_orderLine_unitPrice | null;
   thumbnailUrl: string | null;
 }
 
-export interface OrderCreateFulfillment_orderFulfillmentCreate_order_fulfillments_lines_edges_node {
+export interface OrderCreateFulfillment_orderFulfillmentCreate_order_fulfillments_lines {
   __typename: "FulfillmentLine";
   id: string;
   quantity: number;
-  orderLine: OrderCreateFulfillment_orderFulfillmentCreate_order_fulfillments_lines_edges_node_orderLine;
-}
-
-export interface OrderCreateFulfillment_orderFulfillmentCreate_order_fulfillments_lines_edges {
-  __typename: "FulfillmentLineCountableEdge";
-  node: OrderCreateFulfillment_orderFulfillmentCreate_order_fulfillments_lines_edges_node;
-}
-
-export interface OrderCreateFulfillment_orderFulfillmentCreate_order_fulfillments_lines {
-  __typename: "FulfillmentLineCountableConnection";
-  edges: OrderCreateFulfillment_orderFulfillmentCreate_order_fulfillments_lines_edges[];
+  orderLine: OrderCreateFulfillment_orderFulfillmentCreate_order_fulfillments_lines_orderLine | null;
 }
 
 export interface OrderCreateFulfillment_orderFulfillmentCreate_order_fulfillments {
   __typename: "Fulfillment";
   id: string;
-  lines: OrderCreateFulfillment_orderFulfillmentCreate_order_fulfillments_lines | null;
+  lines: (OrderCreateFulfillment_orderFulfillmentCreate_order_fulfillments_lines | null)[] | null;
   fulfillmentOrder: number;
   status: FulfillmentStatus;
   trackingNumber: string;
@@ -244,7 +234,7 @@ export interface OrderCreateFulfillment_orderFulfillmentCreate_order {
   fulfillments: (OrderCreateFulfillment_orderFulfillmentCreate_order_fulfillments | null)[];
   lines: (OrderCreateFulfillment_orderFulfillmentCreate_order_lines | null)[];
   number: string | null;
-  paymentStatus: PaymentStatusEnum | null;
+  paymentStatus: PaymentChargeStatusEnum | null;
   shippingAddress: OrderCreateFulfillment_orderFulfillmentCreate_order_shippingAddress | null;
   shippingMethod: OrderCreateFulfillment_orderFulfillmentCreate_order_shippingMethod | null;
   shippingMethodName: string | null;
@@ -252,6 +242,7 @@ export interface OrderCreateFulfillment_orderFulfillmentCreate_order {
   status: OrderStatus;
   subtotal: OrderCreateFulfillment_orderFulfillmentCreate_order_subtotal | null;
   total: OrderCreateFulfillment_orderFulfillmentCreate_order_total | null;
+  actions: (OrderAction | null)[];
   totalAuthorized: OrderCreateFulfillment_orderFulfillmentCreate_order_totalAuthorized | null;
   totalCaptured: OrderCreateFulfillment_orderFulfillmentCreate_order_totalCaptured | null;
   user: OrderCreateFulfillment_orderFulfillmentCreate_order_user | null;

@@ -121,7 +121,10 @@
               <span>{% trans "menu" context "Hamburger button text" %}</span>
             </div>
             <a href="{% url 'home' %}">
+              <!--
               <img src="{% static 'images/logo.png' %}">
+              -->
+              <svg data-src="{% static "images/logo-document.svg" %}" height="38px" width="176px"/>
             </a>
           </div>
           <div class="col-2 col-md-4 navbar__search static">
@@ -196,8 +199,9 @@
       <div class="row">
         <div class="col-md-3">
           <a href="{% url 'home' %}" class="footer__logo">
-              <img src="{% static 'images/logo.png' %}">
+            <!--<img src="{% static 'images/logo.png' %}">-->
             <!--<svg data-src="{% static "images/logo.svg" %}" height="38px" width="176px"/>-->
+            <svg data-src="{% static "images/logo-document.svg" %}" height="38px" width="176px"/>
           </a>
         </div>
         <div class="col-md-3 col-sm-6">

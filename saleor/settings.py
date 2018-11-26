@@ -43,7 +43,7 @@ MANAGERS = ADMINS
 
 INTERNAL_IPS = get_list(os.environ.get('INTERNAL_IPS', '127.0.0.1'))
 
-# Some cloud providers like Heroku export REDIS_URL variable instead of CACHE_URL
+# Some cloud providers (Heroku) export REDIS_URL variable instead of CACHE_URL
 REDIS_URL = os.environ.get('REDIS_URL')
 if REDIS_URL:
     CACHE_URL = os.environ.setdefault('CACHE_URL', REDIS_URL)
@@ -187,7 +187,7 @@ INSTALLED_APPS = [
     'saleor.core',
     'saleor.graphql',
     'saleor.menu',
-    'saleor.order.OrderAppConfig',
+    'saleor.order',
     'saleor.dashboard',
     'saleor.seo',
     'saleor.shipping',
@@ -195,6 +195,7 @@ INSTALLED_APPS = [
     'saleor.site',
     'saleor.data_feeds',
     'saleor.page',
+    'saleor.payment',
 
     # External apps
     'versatileimagefield',
@@ -206,7 +207,6 @@ INSTALLED_APPS = [
     'django_prices_vatlayer',
     'graphene_django',
     'mptt',
-    'payments',
     'webpack_loader',
     'social_django',
     'django_countries',
@@ -292,6 +292,7 @@ LOGIN_URL = '/account/login/'
 DEFAULT_COUNTRY = os.environ.get('DEFAULT_COUNTRY', 'US')
 DEFAULT_CURRENCY = os.environ.get('DEFAULT_CURRENCY', 'USD')
 DEFAULT_DECIMAL_PLACES = get_currency_fraction(DEFAULT_CURRENCY)
+DEFAULT_MAX_DIGITS = 12
 AVAILABLE_CURRENCIES = [DEFAULT_CURRENCY]
 COUNTRIES_OVERRIDE = {
     'EU': pgettext_lazy(
@@ -322,18 +323,12 @@ PAYMENT_HOST = get_host
 
 PAYMENT_MODEL = 'order.Payment'
 
-PAYMENT_VARIANTS = {
-    'default': ('payments.dummy.DummyProvider', {})}
-
 SESSION_SERIALIZER = 'django.contrib.sessions.serializers.JSONSerializer'
 
 # Do not use cached session if locmem cache backend is used but fallback to use
 # default django.contrib.sessions.backends.db instead
 if not CACHES['default']['BACKEND'].endswith('LocMemCache'):
     SESSION_ENGINE = 'django.contrib.sessions.backends.cached_db'
-
-CHECKOUT_PAYMENT_CHOICES = [
-    ('default', 'Dummy provider')]
 
 MESSAGE_TAGS = {
     messages.ERROR: 'danger'}
@@ -352,10 +347,11 @@ bootstrap4 = {
     'form_renderers': {
         'default': 'saleor.core.utils.form_renderer.FormRenderer'}}
 
-TEST_RUNNER = ''
+TEST_RUNNER = 'tests.runner.PytestTestRunner'
 
 ALLOWED_HOSTS = get_list(
     os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1'))
+ALLOWED_GRAPHQL_ORIGINS = os.environ.get('ALLOWED_GRAPHQL_ORIGINS', '*')
 
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
@@ -366,6 +362,7 @@ AWS_MEDIA_BUCKET_NAME = os.environ.get('AWS_MEDIA_BUCKET_NAME')
 AWS_MEDIA_CUSTOM_DOMAIN = os.environ.get('AWS_MEDIA_CUSTOM_DOMAIN')
 AWS_QUERYSTRING_AUTH = get_bool_from_env('AWS_QUERYSTRING_AUTH', False)
 AWS_S3_CUSTOM_DOMAIN = os.environ.get('AWS_STATIC_CUSTOM_DOMAIN')
+AWS_S3_ENDPOINT_URL = os.environ.get('AWS_S3_ENDPOINT_URL', None)
 AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY')
 AWS_STORAGE_BUCKET_NAME = os.environ.get('AWS_STORAGE_BUCKET_NAME')
 
@@ -385,7 +382,9 @@ VERSATILEIMAGEFIELD_RENDITION_KEY_SETS = {
         ('product_small', 'thumbnail__60x60'),
         ('product_small_2x', 'thumbnail__120x120'),
         ('product_list', 'thumbnail__255x255'),
-        ('product_list_2x', 'thumbnail__510x510')]}
+        ('product_list_2x', 'thumbnail__510x510')],
+    'background_images': [
+        ('header_image', 'thumbnail__1080x440')]}
 
 VERSATILEIMAGEFIELD_SETTINGS = {
     # Images should be pre-generated on Production environment
@@ -419,8 +418,10 @@ LOGOUT_ON_PASSWORD_CHANGE = False
 DB_SEARCH_ENABLED = True
 
 # support deployment-dependant elastic enviroment variable
-ES_URL = (os.environ.get('ELASTICSEARCH_URL') or
-          os.environ.get('SEARCHBOX_URL') or os.environ.get('BONSAI_URL'))
+ES_URL = (
+    os.environ.get('ELASTICSEARCH_URL')
+    or os.environ.get('SEARCHBOX_URL')
+    or os.environ.get('BONSAI_URL'))
 
 ENABLE_SEARCH = bool(ES_URL) or DB_SEARCH_ENABLED  # global search disabling
 
@@ -524,3 +525,25 @@ if SENTRY_DSN:
 
 SERIALIZATION_MODULES = {
     'json': 'saleor.core.utils.json_serializer'}
+
+
+DUMMY = 'dummy'
+BRAINTREE = 'braintree'
+CHECKOUT_PAYMENT_GATEWAYS = {
+    DUMMY: pgettext_lazy('Payment method name', 'Dummy gateway')
+}
+
+PAYMENT_GATEWAYS = {
+    DUMMY: {
+        'module': 'saleor.payment.gateways.dummy',
+        'connection_params': {}},
+    BRAINTREE: {
+        'module': 'saleor.payment.gateways.braintree',
+        'connection_params': {
+            'sandbox_mode': get_bool_from_env('BRAINTREE_SANDBOX_MODE', True),
+            'merchant_id': os.environ.get('BRAINTREE_MERCHANT_ID'),
+            'public_key': os.environ.get('BRAINTREE_PUBLIC_KEY'),
+            'private_key': os.environ.get('BRAINTREE_PRIVATE_KEY')
+        }
+    }
+}

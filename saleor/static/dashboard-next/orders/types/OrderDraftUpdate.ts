@@ -1,7 +1,7 @@
 /* tslint:disable */
 // This file was automatically generated and should not be edited.
 
-import { DraftOrderInput, OrderEventsEmails, OrderEvents, FulfillmentStatus, PaymentStatusEnum, OrderStatus } from "./../../types/globalTypes";
+import { DraftOrderInput, OrderEventsEmails, OrderEvents, FulfillmentStatus, PaymentChargeStatusEnum, OrderStatus, OrderAction } from "./../../types/globalTypes";
 
 // ====================================================
 // GraphQL mutation operation: OrderDraftUpdate
@@ -53,56 +53,46 @@ export interface OrderDraftUpdate_draftOrderUpdate_order_events {
   user: OrderDraftUpdate_draftOrderUpdate_order_events_user | null;
 }
 
-export interface OrderDraftUpdate_draftOrderUpdate_order_fulfillments_lines_edges_node_orderLine_unitPrice_gross {
+export interface OrderDraftUpdate_draftOrderUpdate_order_fulfillments_lines_orderLine_unitPrice_gross {
   __typename: "Money";
   amount: number;
   currency: string;
 }
 
-export interface OrderDraftUpdate_draftOrderUpdate_order_fulfillments_lines_edges_node_orderLine_unitPrice_net {
+export interface OrderDraftUpdate_draftOrderUpdate_order_fulfillments_lines_orderLine_unitPrice_net {
   __typename: "Money";
   amount: number;
   currency: string;
 }
 
-export interface OrderDraftUpdate_draftOrderUpdate_order_fulfillments_lines_edges_node_orderLine_unitPrice {
+export interface OrderDraftUpdate_draftOrderUpdate_order_fulfillments_lines_orderLine_unitPrice {
   __typename: "TaxedMoney";
-  gross: OrderDraftUpdate_draftOrderUpdate_order_fulfillments_lines_edges_node_orderLine_unitPrice_gross;
-  net: OrderDraftUpdate_draftOrderUpdate_order_fulfillments_lines_edges_node_orderLine_unitPrice_net;
+  gross: OrderDraftUpdate_draftOrderUpdate_order_fulfillments_lines_orderLine_unitPrice_gross;
+  net: OrderDraftUpdate_draftOrderUpdate_order_fulfillments_lines_orderLine_unitPrice_net;
 }
 
-export interface OrderDraftUpdate_draftOrderUpdate_order_fulfillments_lines_edges_node_orderLine {
+export interface OrderDraftUpdate_draftOrderUpdate_order_fulfillments_lines_orderLine {
   __typename: "OrderLine";
   id: string;
   productName: string;
   productSku: string;
   quantity: number;
   quantityFulfilled: number;
-  unitPrice: OrderDraftUpdate_draftOrderUpdate_order_fulfillments_lines_edges_node_orderLine_unitPrice | null;
+  unitPrice: OrderDraftUpdate_draftOrderUpdate_order_fulfillments_lines_orderLine_unitPrice | null;
   thumbnailUrl: string | null;
 }
 
-export interface OrderDraftUpdate_draftOrderUpdate_order_fulfillments_lines_edges_node {
+export interface OrderDraftUpdate_draftOrderUpdate_order_fulfillments_lines {
   __typename: "FulfillmentLine";
   id: string;
   quantity: number;
-  orderLine: OrderDraftUpdate_draftOrderUpdate_order_fulfillments_lines_edges_node_orderLine;
-}
-
-export interface OrderDraftUpdate_draftOrderUpdate_order_fulfillments_lines_edges {
-  __typename: "FulfillmentLineCountableEdge";
-  node: OrderDraftUpdate_draftOrderUpdate_order_fulfillments_lines_edges_node;
-}
-
-export interface OrderDraftUpdate_draftOrderUpdate_order_fulfillments_lines {
-  __typename: "FulfillmentLineCountableConnection";
-  edges: OrderDraftUpdate_draftOrderUpdate_order_fulfillments_lines_edges[];
+  orderLine: OrderDraftUpdate_draftOrderUpdate_order_fulfillments_lines_orderLine | null;
 }
 
 export interface OrderDraftUpdate_draftOrderUpdate_order_fulfillments {
   __typename: "Fulfillment";
   id: string;
-  lines: OrderDraftUpdate_draftOrderUpdate_order_fulfillments_lines | null;
+  lines: (OrderDraftUpdate_draftOrderUpdate_order_fulfillments_lines | null)[] | null;
   fulfillmentOrder: number;
   status: FulfillmentStatus;
   trackingNumber: string;
@@ -244,7 +234,7 @@ export interface OrderDraftUpdate_draftOrderUpdate_order {
   fulfillments: (OrderDraftUpdate_draftOrderUpdate_order_fulfillments | null)[];
   lines: (OrderDraftUpdate_draftOrderUpdate_order_lines | null)[];
   number: string | null;
-  paymentStatus: PaymentStatusEnum | null;
+  paymentStatus: PaymentChargeStatusEnum | null;
   shippingAddress: OrderDraftUpdate_draftOrderUpdate_order_shippingAddress | null;
   shippingMethod: OrderDraftUpdate_draftOrderUpdate_order_shippingMethod | null;
   shippingMethodName: string | null;
@@ -252,6 +242,7 @@ export interface OrderDraftUpdate_draftOrderUpdate_order {
   status: OrderStatus;
   subtotal: OrderDraftUpdate_draftOrderUpdate_order_subtotal | null;
   total: OrderDraftUpdate_draftOrderUpdate_order_total | null;
+  actions: (OrderAction | null)[];
   totalAuthorized: OrderDraftUpdate_draftOrderUpdate_order_totalAuthorized | null;
   totalCaptured: OrderDraftUpdate_draftOrderUpdate_order_totalCaptured | null;
   user: OrderDraftUpdate_draftOrderUpdate_order_user | null;

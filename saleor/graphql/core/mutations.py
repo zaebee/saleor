@@ -1,4 +1,5 @@
 from itertools import chain
+from textwrap import dedent
 
 import graphene
 from django.core.exceptions import ImproperlyConfigured, ValidationError
@@ -10,9 +11,8 @@ from graphql_jwt.exceptions import JSONWebTokenError, PermissionDenied
 
 from ...account import models
 from ..account.types import User
-from ..file_upload.types import Upload
 from ..utils import get_nodes
-from .types.common import Error
+from .types import Error, Upload
 from .utils import snake_to_camel_case
 
 registry = get_global_registry()
@@ -27,6 +27,10 @@ def get_model_name(model):
 def get_output_fields(model, return_field_name):
     """Return mutation output field for model instance."""
     model_type = registry.get_type_for_model(model)
+    if not model_type:
+        raise ImproperlyConfigured(
+            'Unable to find type for model %s in graphene registry' %
+            model.__name__)
     fields = {return_field_name: graphene.Field(model_type)}
     return fields
 
@@ -49,6 +53,7 @@ class BaseMutation(graphene.Mutation):
     def __init_subclass_with_meta__(cls, description=None, **options):
         if not description:
             raise ImproperlyConfigured('No description provided in Meta')
+        description = dedent(description)
         super().__init_subclass_with_meta__(description=description, **options)
 
     @classmethod
@@ -101,7 +106,7 @@ class BaseMutation(graphene.Mutation):
 
         Once a instance is created, this method runs `full_clean()` to perform
         model fields' validation. Returns errors ready to be returned by
-        the GraphQL response (if any occured).
+        the GraphQL response (if any occurred).
         """
         try:
             instance.full_clean()
@@ -115,6 +120,28 @@ class BaseMutation(graphene.Mutation):
                     cls.add_error(errors, field, message)
         return errors
 
+    @classmethod
+    def construct_instance(cls, instance, cleaned_data):
+        """Fill instance fields with cleaned data.
+
+        The `instance` argument is either an empty instance of a already
+        existing one which was fetched from the database. `cleaned_data` is
+        data to be set in instance fields. Returns `instance` with filled
+        fields, but not saved to the database.
+        """
+        from django.db import models
+        opts = instance._meta
+
+        for f in opts.fields:
+            if any([not f.editable, isinstance(f, models.AutoField),
+                    f.name not in cleaned_data]):
+                continue
+            data = cleaned_data[f.name]
+            if not f.null and data is None:
+                data = f._get_default()
+            f.save_form_data(instance, data)
+        return instance
+
 
 class ModelMutation(BaseMutation):
     class Meta:
@@ -122,8 +149,8 @@ class ModelMutation(BaseMutation):
 
     @classmethod
     def __init_subclass_with_meta__(
-            cls, arguments=None, model=None, exclude=None, _meta=None,
-            **options):
+            cls, arguments=None, model=None, exclude=None,
+            return_field_name=None, _meta=None, **options):
         if not model:
             raise ImproperlyConfigured('model is required for ModelMutation')
         if not _meta:
@@ -132,7 +159,8 @@ class ModelMutation(BaseMutation):
         if exclude is None:
             exclude = []
 
-        return_field_name = get_model_name(model)
+        if not return_field_name:
+            return_field_name = get_model_name(model)
         if arguments is None:
             arguments = {}
         fields = get_output_fields(model, return_field_name)
@@ -203,28 +231,6 @@ class ModelMutation(BaseMutation):
                 else:
                     cleaned_input[field_name] = value
         return cleaned_input
-
-    @classmethod
-    def construct_instance(cls, instance, cleaned_data):
-        """Fill instance fields with cleaned data.
-
-        The `instance` argument is either an empty instance of a already
-        existing one which was fetched from the database. `cleaned_data` is
-        data to be set in instance fields. Returns `instance` with filled
-        fields, but not saved to the database.
-        """
-        from django.db import models
-        opts = instance._meta
-
-        for f in opts.fields:
-            if any([not f.editable, isinstance(f, models.AutoField),
-                    f.name not in cleaned_data]):
-                continue
-            data = cleaned_data[f.name]
-            if not f.null and data is None:
-                data = f._get_default()
-            f.save_form_data(instance, data)
-        return instance
 
     @classmethod
     def _save_m2m(cls, info, instance, cleaned_data):
@@ -298,6 +304,15 @@ class ModelDeleteMutation(ModelMutation):
         abstract = True
 
     @classmethod
+    def clean_instance(cls, info, instance, errors):
+        """Perform additional logic before deleting the model instance.
+
+        Override this method to raise custom validation error and abort
+        the deletion process.
+        """
+        pass
+
+    @classmethod
     def mutate(cls, root, info, **data):
         """Perform a mutation that deletes a model instance."""
         if not cls.user_is_allowed(info.context.user, data):
@@ -308,6 +323,9 @@ class ModelDeleteMutation(ModelMutation):
         model_type = registry.get_type_for_model(cls._meta.model)
         instance = cls.get_node_or_error(
             info, node_id, errors, 'id', model_type)
+
+        if instance:
+            cls.clean_instance(info, instance, errors)
 
         if errors:
             return cls(errors=errors)

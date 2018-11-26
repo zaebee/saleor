@@ -4,6 +4,7 @@ import Drawer from "@material-ui/core/Drawer";
 import Grow from "@material-ui/core/Grow";
 import Hidden from "@material-ui/core/Hidden";
 import IconButton from "@material-ui/core/IconButton";
+import LinearProgress from "@material-ui/core/LinearProgress";
 import MenuItem from "@material-ui/core/MenuItem";
 import Menu from "@material-ui/core/MenuList";
 import Paper from "@material-ui/core/Paper";
@@ -12,7 +13,8 @@ import { withStyles, WithStyles } from "@material-ui/core/styles";
 import Toolbar from "@material-ui/core/Toolbar";
 import Typography from "@material-ui/core/Typography";
 import MenuIcon from "@material-ui/icons/Menu";
-import PersonIcon from "@material-ui/icons/Person";
+import Person from "@material-ui/icons/Person";
+import PersonOutline from "@material-ui/icons/PersonOutline";
 import SettingsIcon from "@material-ui/icons/Settings";
 import * as classNames from "classnames";
 import * as React from "react";
@@ -22,19 +24,23 @@ import { appMountPoint } from ".";
 import * as saleorLogo from "../images/logo.svg";
 import { UserContext } from "./auth";
 import { User } from "./auth/types/User";
-import { categoryListUrl } from "./categories";
+import { categoryListUrl } from "./categories/urls";
+import { collectionListUrl } from "./collections/urls";
+import AppProgress from "./components/AppProgress";
 import MenuToggle from "./components/MenuToggle";
 import Navigator from "./components/Navigator";
 import Toggle from "./components/Toggle";
 import { configurationMenu, configurationMenuUrl } from "./configuration";
+import { customerListUrl } from "./customers/urls";
 import i18n from "./i18n";
 import ArrowDropdown from "./icons/ArrowDropdown";
 import Home from "./icons/Home";
 import Shop from "./icons/Shop";
 import Truck from "./icons/Truck";
 import { removeDoubleSlashes } from "./misc";
-import { productListUrl } from "./products";
-import { PermissionEnum } from './types/globalTypes';
+import { orderListUrl } from "./orders/urls";
+import { productListUrl } from "./products/urls";
+import { PermissionEnum } from "./types/globalTypes";
 
 const drawerWidth = 256;
 const navigationBarHeight = 64;
@@ -53,13 +59,19 @@ const menuStructure: IMenuItem[] = [
         ariaLabel: "products",
         icon: <Shop />,
         label: i18n.t("Products", { context: "Menu label" }),
-        url: productListUrl
+        url: productListUrl()
       },
       {
         ariaLabel: "categories",
         icon: <Shop />,
         label: i18n.t("Categories", { context: "Menu label" }),
         url: categoryListUrl
+      },
+      {
+        ariaLabel: "collections",
+        icon: <Shop />,
+        label: i18n.t("Collections", { context: "Menu label" }),
+        url: collectionListUrl
       }
     ],
     icon: <Shop />,
@@ -71,7 +83,14 @@ const menuStructure: IMenuItem[] = [
     icon: <Truck />,
     label: i18n.t("Orders", { context: "Menu label" }),
     permission: PermissionEnum.MANAGE_ORDERS,
-    url: "/orders/"
+    url: orderListUrl()
+  },
+  {
+    ariaLabel: "customers",
+    icon: <PersonOutline />,
+    label: i18n.t("Customers", { context: "Menu label" }),
+    permission: PermissionEnum.MANAGE_USERS,
+    url: customerListUrl
   }
 ];
 
@@ -87,6 +106,10 @@ const decorate = withStyles(
       display: "flex",
       width: "100%",
       zIndex: 1
+    },
+    appLoader: {
+      gridColumn: "span 2",
+      height: 2
     },
     arrow: {
       marginLeft: theme.spacing.unit * 2,
@@ -313,6 +336,7 @@ export const AppRoot = decorate(
     WithStyles<
       | "appBar"
       | "appFrame"
+      | "appLoader"
       | "arrow"
       | "content"
       | "contentShift"
@@ -349,162 +373,185 @@ export const AppRoot = decorate(
       const { children, classes } = this.props;
       const { open } = this.state;
       return (
-        <UserContext.Consumer>
-          {({ logout, user }) => (
-            <Navigator>
-              {navigate => {
-                const handleMenuItemClick = (
-                  url: string,
-                  event: React.MouseEvent<any>
-                ) => {
-                  event.preventDefault();
-                  this.closeDrawer();
-                  navigate(url);
-                };
-                return (
-                  <div className={classes.appFrame}>
-                    <AppBar className={classes.appBar}>
-                      <Toolbar disableGutters className={classes.toolBarMenu}>
-                        <IconButton
-                          color="inherit"
-                          aria-label="open drawer"
-                          onClick={() =>
-                            this.setState(({ open }) => ({
-                              open: !open
-                            }))
-                          }
-                          className={classes.menuButton}
-                        >
-                          <MenuIcon />
-                        </IconButton>
-                        <SVG className={classes.logo} src={saleorLogo} />
-                      </Toolbar>
-                      <Toolbar
-                        disableGutters
-                        className={classes.toolBarContent}
-                      >
-                        <div className={classes.spacer} />
-                        <MenuToggle ariaOwns="user-menu">
-                          {({
-                            open: menuOpen,
-                            actions: { open: openMenu, close: closeMenu }
-                          }) => {
-                            const handleLogout = () => {
-                              close();
-                              logout();
-                            };
-                            return (
-                              <>
-                                <div
-                                  className={classes.email}
-                                  ref={this.anchor}
-                                  onClick={!menuOpen ? openMenu : undefined}
-                                >
-                                  <Hidden smDown>
-                                    <Typography
-                                      className={classes.emailLabel}
-                                      component="span"
-                                      variant="subheading"
-                                    >
-                                      {user.email}
-                                    </Typography>
-                                    <ArrowDropdown
-                                      className={classNames({
-                                        [classes.arrow]: true,
-                                        [classes.rotate]: menuOpen
-                                      })}
-                                    />
-                                  </Hidden>
-                                  <Hidden mdUp>
-                                    <IconButton className={classes.userIcon}>
-                                      <PersonIcon />
-                                    </IconButton>
-                                  </Hidden>
-                                </div>
-                                <Popper
-                                  open={menuOpen}
-                                  anchorEl={this.anchor.current}
-                                  transition
-                                  disablePortal
-                                  placement="bottom-end"
-                                >
-                                  {({ TransitionProps, placement }) => (
-                                    <Grow
-                                      {...TransitionProps}
-                                      style={{
-                                        minWidth: "10rem",
-                                        transformOrigin:
-                                          placement === "bottom"
-                                            ? "right top"
-                                            : "right bottom"
-                                      }}
-                                    >
-                                      <Paper>
-                                        <ClickAwayListener
-                                          onClickAway={closeMenu}
-                                          mouseEvent="onClick"
-                                        >
-                                          <Menu>
-                                            <MenuItem
-                                              className={classes.userMenuItem}
-                                              onClick={handleLogout}
-                                            >
-                                              {i18n.t("Log out", {
-                                                context: "button"
-                                              })}
-                                            </MenuItem>
-                                          </Menu>
-                                        </ClickAwayListener>
-                                      </Paper>
-                                    </Grow>
-                                  )}
-                                </Popper>
-                              </>
-                            );
-                          }}
-                        </MenuToggle>
-                      </Toolbar>
-                    </AppBar>
-                    <ResponsiveDrawer onClose={this.closeDrawer} open={open}>
-                      <div className={classes.menuList}>
-                        <MenuList
-                          menuItems={menuStructure}
-                          user={user}
-                          onMenuItemClick={handleMenuItemClick}
-                        />
-                        <div className={classes.spacer} />
-                        {configurationMenu.filter(menuItem =>
-                          user.permissions
-                            .map(perm => perm.code)
-                            .includes(menuItem.permission)
-                        ).length > 0 && (
-                          <a
-                            className={classes.menuListItem}
-                            href={removeDoubleSlashes(
-                              appMountPoint + configurationMenuUrl
-                            )}
-                            onClick={event =>
-                              handleMenuItemClick(configurationMenuUrl, event)
-                            }
+        <AppProgress>
+          {({ value: isProgressVisible }) => (
+            <UserContext.Consumer>
+              {({ logout, user }) => (
+                <Navigator>
+                  {navigate => {
+                    const handleMenuItemClick = (
+                      url: string,
+                      event: React.MouseEvent<any>
+                    ) => {
+                      event.preventDefault();
+                      this.closeDrawer();
+                      navigate(url);
+                    };
+                    return (
+                      <div className={classes.appFrame}>
+                        <AppBar className={classes.appBar}>
+                          <Toolbar
+                            disableGutters
+                            className={classes.toolBarMenu}
                           >
-                            <SettingsIcon />
-                            <Typography
-                              aria-label="configure"
-                              className={classes.menuListItemText}
+                            <IconButton
+                              color="inherit"
+                              aria-label="open drawer"
+                              onClick={() =>
+                                this.setState(({ open }) => ({
+                                  open: !open
+                                }))
+                              }
+                              className={classes.menuButton}
                             >
-                              {i18n.t("Configure")}
-                            </Typography>
-                          </a>
-                        )}
+                              <MenuIcon />
+                            </IconButton>
+                            <SVG className={classes.logo} src={saleorLogo} />
+                          </Toolbar>
+                          <Toolbar
+                            disableGutters
+                            className={classes.toolBarContent}
+                          >
+                            <div className={classes.spacer} />
+                            <MenuToggle ariaOwns="user-menu">
+                              {({
+                                open: menuOpen,
+                                actions: { open: openMenu, close: closeMenu }
+                              }) => {
+                                const handleLogout = () => {
+                                  close();
+                                  logout();
+                                };
+                                return (
+                                  <>
+                                    <div
+                                      className={classes.email}
+                                      ref={this.anchor}
+                                      onClick={!menuOpen ? openMenu : undefined}
+                                    >
+                                      <Hidden smDown>
+                                        <Typography
+                                          className={classes.emailLabel}
+                                          component="span"
+                                          variant="subheading"
+                                        >
+                                          {user.email}
+                                        </Typography>
+                                        <ArrowDropdown
+                                          className={classNames({
+                                            [classes.arrow]: true,
+                                            [classes.rotate]: menuOpen
+                                          })}
+                                        />
+                                      </Hidden>
+                                      <Hidden mdUp>
+                                        <IconButton
+                                          className={classes.userIcon}
+                                        >
+                                          <Person />
+                                        </IconButton>
+                                      </Hidden>
+                                    </div>
+                                    <Popper
+                                      open={menuOpen}
+                                      anchorEl={this.anchor.current}
+                                      transition
+                                      disablePortal
+                                      placement="bottom-end"
+                                    >
+                                      {({ TransitionProps, placement }) => (
+                                        <Grow
+                                          {...TransitionProps}
+                                          style={{
+                                            minWidth: "10rem",
+                                            transformOrigin:
+                                              placement === "bottom"
+                                                ? "right top"
+                                                : "right bottom"
+                                          }}
+                                        >
+                                          <Paper>
+                                            <ClickAwayListener
+                                              onClickAway={closeMenu}
+                                              mouseEvent="onClick"
+                                            >
+                                              <Menu>
+                                                <MenuItem
+                                                  className={
+                                                    classes.userMenuItem
+                                                  }
+                                                  onClick={handleLogout}
+                                                >
+                                                  {i18n.t("Log out", {
+                                                    context: "button"
+                                                  })}
+                                                </MenuItem>
+                                              </Menu>
+                                            </ClickAwayListener>
+                                          </Paper>
+                                        </Grow>
+                                      )}
+                                    </Popper>
+                                  </>
+                                );
+                              }}
+                            </MenuToggle>
+                          </Toolbar>
+                          {isProgressVisible && (
+                            <LinearProgress
+                              className={classes.appLoader}
+                              color="secondary"
+                            />
+                          )}
+                        </AppBar>
+                        <ResponsiveDrawer
+                          onClose={this.closeDrawer}
+                          open={open}
+                        >
+                          <div className={classes.menuList}>
+                            <MenuList
+                              menuItems={menuStructure}
+                              user={user}
+                              onMenuItemClick={handleMenuItemClick}
+                            />
+                            <div className={classes.spacer} />
+                            {configurationMenu.filter(menuItem =>
+                              user.permissions
+                                .map(perm => perm.code)
+                                .includes(menuItem.permission)
+                            ).length > 0 && (
+                              <a
+                                className={classes.menuListItem}
+                                href={removeDoubleSlashes(
+                                  appMountPoint + configurationMenuUrl
+                                )}
+                                onClick={event =>
+                                  handleMenuItemClick(
+                                    configurationMenuUrl,
+                                    event
+                                  )
+                                }
+                              >
+                                <SettingsIcon />
+                                <Typography
+                                  aria-label="configure"
+                                  className={classes.menuListItemText}
+                                >
+                                  {i18n.t("Configure")}
+                                </Typography>
+                              </a>
+                            )}
+                          </div>
+                        </ResponsiveDrawer>
+                        <main className={classes.content}>{children}</main>
                       </div>
-                    </ResponsiveDrawer>
-                    <main className={classes.content}>{children}</main>
-                  </div>
-                );
-              }}
-            </Navigator>
+                    );
+                  }}
+                </Navigator>
+              )}
+            </UserContext.Consumer>
           )}
-        </UserContext.Consumer>
+        </AppProgress>
       );
     }
   }

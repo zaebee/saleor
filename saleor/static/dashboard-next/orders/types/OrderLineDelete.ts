@@ -1,7 +1,7 @@
 /* tslint:disable */
 // This file was automatically generated and should not be edited.
 
-import { OrderEventsEmails, OrderEvents, FulfillmentStatus, PaymentStatusEnum, OrderStatus } from "./../../types/globalTypes";
+import { OrderEventsEmails, OrderEvents, FulfillmentStatus, PaymentChargeStatusEnum, OrderStatus, OrderAction } from "./../../types/globalTypes";
 
 // ====================================================
 // GraphQL mutation operation: OrderLineDelete
@@ -53,56 +53,46 @@ export interface OrderLineDelete_draftOrderLineDelete_order_events {
   user: OrderLineDelete_draftOrderLineDelete_order_events_user | null;
 }
 
-export interface OrderLineDelete_draftOrderLineDelete_order_fulfillments_lines_edges_node_orderLine_unitPrice_gross {
+export interface OrderLineDelete_draftOrderLineDelete_order_fulfillments_lines_orderLine_unitPrice_gross {
   __typename: "Money";
   amount: number;
   currency: string;
 }
 
-export interface OrderLineDelete_draftOrderLineDelete_order_fulfillments_lines_edges_node_orderLine_unitPrice_net {
+export interface OrderLineDelete_draftOrderLineDelete_order_fulfillments_lines_orderLine_unitPrice_net {
   __typename: "Money";
   amount: number;
   currency: string;
 }
 
-export interface OrderLineDelete_draftOrderLineDelete_order_fulfillments_lines_edges_node_orderLine_unitPrice {
+export interface OrderLineDelete_draftOrderLineDelete_order_fulfillments_lines_orderLine_unitPrice {
   __typename: "TaxedMoney";
-  gross: OrderLineDelete_draftOrderLineDelete_order_fulfillments_lines_edges_node_orderLine_unitPrice_gross;
-  net: OrderLineDelete_draftOrderLineDelete_order_fulfillments_lines_edges_node_orderLine_unitPrice_net;
+  gross: OrderLineDelete_draftOrderLineDelete_order_fulfillments_lines_orderLine_unitPrice_gross;
+  net: OrderLineDelete_draftOrderLineDelete_order_fulfillments_lines_orderLine_unitPrice_net;
 }
 
-export interface OrderLineDelete_draftOrderLineDelete_order_fulfillments_lines_edges_node_orderLine {
+export interface OrderLineDelete_draftOrderLineDelete_order_fulfillments_lines_orderLine {
   __typename: "OrderLine";
   id: string;
   productName: string;
   productSku: string;
   quantity: number;
   quantityFulfilled: number;
-  unitPrice: OrderLineDelete_draftOrderLineDelete_order_fulfillments_lines_edges_node_orderLine_unitPrice | null;
+  unitPrice: OrderLineDelete_draftOrderLineDelete_order_fulfillments_lines_orderLine_unitPrice | null;
   thumbnailUrl: string | null;
 }
 
-export interface OrderLineDelete_draftOrderLineDelete_order_fulfillments_lines_edges_node {
+export interface OrderLineDelete_draftOrderLineDelete_order_fulfillments_lines {
   __typename: "FulfillmentLine";
   id: string;
   quantity: number;
-  orderLine: OrderLineDelete_draftOrderLineDelete_order_fulfillments_lines_edges_node_orderLine;
-}
-
-export interface OrderLineDelete_draftOrderLineDelete_order_fulfillments_lines_edges {
-  __typename: "FulfillmentLineCountableEdge";
-  node: OrderLineDelete_draftOrderLineDelete_order_fulfillments_lines_edges_node;
-}
-
-export interface OrderLineDelete_draftOrderLineDelete_order_fulfillments_lines {
-  __typename: "FulfillmentLineCountableConnection";
-  edges: OrderLineDelete_draftOrderLineDelete_order_fulfillments_lines_edges[];
+  orderLine: OrderLineDelete_draftOrderLineDelete_order_fulfillments_lines_orderLine | null;
 }
 
 export interface OrderLineDelete_draftOrderLineDelete_order_fulfillments {
   __typename: "Fulfillment";
   id: string;
-  lines: OrderLineDelete_draftOrderLineDelete_order_fulfillments_lines | null;
+  lines: (OrderLineDelete_draftOrderLineDelete_order_fulfillments_lines | null)[] | null;
   fulfillmentOrder: number;
   status: FulfillmentStatus;
   trackingNumber: string;
@@ -244,7 +234,7 @@ export interface OrderLineDelete_draftOrderLineDelete_order {
   fulfillments: (OrderLineDelete_draftOrderLineDelete_order_fulfillments | null)[];
   lines: (OrderLineDelete_draftOrderLineDelete_order_lines | null)[];
   number: string | null;
-  paymentStatus: PaymentStatusEnum | null;
+  paymentStatus: PaymentChargeStatusEnum | null;
   shippingAddress: OrderLineDelete_draftOrderLineDelete_order_shippingAddress | null;
   shippingMethod: OrderLineDelete_draftOrderLineDelete_order_shippingMethod | null;
   shippingMethodName: string | null;
@@ -252,6 +242,7 @@ export interface OrderLineDelete_draftOrderLineDelete_order {
   status: OrderStatus;
   subtotal: OrderLineDelete_draftOrderLineDelete_order_subtotal | null;
   total: OrderLineDelete_draftOrderLineDelete_order_total | null;
+  actions: (OrderAction | null)[];
   totalAuthorized: OrderLineDelete_draftOrderLineDelete_order_totalAuthorized | null;
   totalCaptured: OrderLineDelete_draftOrderLineDelete_order_totalCaptured | null;
   user: OrderLineDelete_draftOrderLineDelete_order_user | null;
